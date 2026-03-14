@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR空中書道 完成版</title>
+<title>AR空中書道 進化版</title>
 
 <style>
 body{
@@ -26,9 +26,15 @@ let controller;
 let drawing=false;
 
 let points=[];
-let strokeMeshes=[];
+let meshes=[];
+let fallingMeshes=[];
 
-let lastPos=null;
+let brushSize=0.02;
+
+const gravity=-0.003;
+
+const textureLoader=new THREE.TextureLoader();
+const inkTexture=textureLoader.load("ink.png");
 
 init();
 animate();
@@ -72,7 +78,7 @@ controller=renderer.xr.getController(0);
 controller.addEventListener("selectstart",startDraw);
 controller.addEventListener("selectend",endDraw);
 
-controller.addEventListener("connected", (event)=>{
+controller.addEventListener("connected",(event)=>{
 
 controller.gamepad=event.data.gamepad;
 
@@ -114,15 +120,25 @@ function startDraw(){
 
 drawing=true;
 points=[];
-lastPos=null;
 
 }
 
 function endDraw(){
 
 drawing=false;
-points=[];
-lastPos=null;
+
+setTimeout(()=>{
+
+meshes.forEach(m=>{
+fallingMeshes.push({
+mesh:m,
+velocity:0
+});
+});
+
+meshes=[];
+
+},1500);
 
 }
 
@@ -140,17 +156,16 @@ const curr=points[points.length-1];
 
 const dist=prev.distanceTo(curr);
 
-const radius=THREE.MathUtils.clamp(0.02/dist,0.003,0.02);
-
 const geometry=new THREE.CylinderGeometry(
-radius,
-radius,
+brushSize,
+brushSize,
 dist,
 6
 );
 
 const material=new THREE.MeshStandardMaterial({
-color:0x111111,
+map:inkTexture,
+transparent:true,
 roughness:1
 });
 
@@ -165,17 +180,30 @@ mesh.rotateX(Math.PI/2);
 
 scene.add(mesh);
 
-strokeMeshes.push(mesh);
+meshes.push(mesh);
+
+}
+
+function updateGravity(){
+
+fallingMeshes.forEach(obj=>{
+
+obj.velocity+=gravity;
+
+obj.mesh.position.y+=obj.velocity;
+
+});
 
 }
 
 function clearAll(){
 
-strokeMeshes.forEach(m=>{
+[...meshes,...fallingMeshes.map(o=>o.mesh)].forEach(m=>{
 scene.remove(m);
 });
 
-strokeMeshes=[];
+meshes=[];
+fallingMeshes=[];
 
 }
 
@@ -186,9 +214,15 @@ if(!controller.gamepad) return;
 const gp=controller.gamepad;
 
 if(gp.buttons[4] && gp.buttons[4].pressed){
-
 clearAll();
+}
 
+if(gp.buttons[5] && gp.buttons[5].pressed){
+brushSize=0.04;
+}
+
+if(gp.buttons[3] && gp.buttons[3].pressed){
+brushSize=0.01;
 }
 
 }
@@ -206,6 +240,8 @@ checkButtons();
 if(drawing){
 draw();
 }
+
+updateGravity();
 
 renderer.render(scene,camera);
 
