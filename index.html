@@ -102,7 +102,7 @@ const mat=new THREE.MeshBasicMaterial({
 });
 
 paper=new THREE.Mesh(geo,mat);
-paper.position.set(0,0.5,-1.0);
+paper.position.set(0,0.3,-1.0);
 paper.rotation.x = -0.15;
 scene.add(paper);
 
@@ -196,13 +196,13 @@ prevPoint=point;
 
 function stamp(pos,size){
 
-const geo=new THREE.PlaneGeometry(size,size);
+const geo = new THREE.PlaneGeometry(size,size);
 
-const mesh=new THREE.Mesh(geo,brushMaterial);
+const mesh = new THREE.Mesh(geo,brushMaterial);
 
 mesh.position.copy(pos);
 
-mesh.lookAt(camera.position);
+mesh.quaternion.copy(paper.quaternion);
 
 scene.add(mesh);
 
