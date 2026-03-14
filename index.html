@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR空中書道</title>
+<title>AR空中書道t</title>
 
 <style>
 body{
@@ -159,12 +159,12 @@ for(const source of session.inputSources){
 
 if(!source.gamepad) continue;
 
-const axes = source.gamepad.axes;
+const buttons = source.gamepad.buttons;
 
-// Questは index2 がトリガー
-if(axes.length > 2){
+// index0 がトリガー
+if(buttons.length > 0){
 
-return (axes[2] + 1) * 0.5;
+return buttons[0].value; // 0〜1
 
 }
 
