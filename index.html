@@ -3,260 +3,271 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道</title>
+<title>AR書道（Quest3 / WebXR）</title>
 <style>
-body{margin:0;overflow:hidden;background:#000;}
+body { margin:0; overflow:hidden; background:#000; }
+canvas { display:block; }
+#ui {
+  position: fixed; left: 10px; top: 10px; color: #fff; font-family: sans-serif;
+  background: rgba(0,0,0,0.4); padding: 8px 10px; border-radius: 6px; font-size: 12px;
+}
 </style>
 </head>
-
 <body>
+<div id="ui">
+トリガー：書く / 離す：止める<br>
+Aボタン：全消し
+</div>
 
 <script type="module">
+import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160/build/three.module.js";
+import { ARButton } from "https://cdn.jsdelivr.net/npm/three@0.160/examples/jsm/webxr/ARButton.js";
+import { FontLoader } from "https://cdn.jsdelivr.net/npm/three@0.160/examples/jsm/loaders/FontLoader.js";
+import { TextGeometry } from "https://cdn.jsdelivr.net/npm/three@0.160/examples/jsm/geometries/TextGeometry.js";
 
-import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
-import { ARButton } from "https://unpkg.com/three@0.160.0/examples/jsm/webxr/ARButton.js";
-
-let scene,camera,renderer;
+let scene, camera, renderer;
 let controller;
 
-let paper;
-let drawing=false;
+let drawing = false;
+let prevPoint = null;
+let brushWidth = 0.02;
 
-let prevPoint=null;
-let width=0.03;
+let stampTexture;
+let stampMaterial;
 
-const raycaster=new THREE.Raycaster();
-const tempMatrix=new THREE.Matrix4();
+const stamps = [];
+const clock = new THREE.Clock();
 
-const stamps=[];
-
-const texture=new THREE.TextureLoader().load("ink.png");
-
-const brushMaterial=new THREE.MeshBasicMaterial({
- map:texture,
- transparent:true,
- depthWrite:false
-});
+// パラメータ
+const MIN_WIDTH = 0.01;
+const MAX_WIDTH = 0.06;
+const WIDTH_SMOOTH = 0.25;
+const STAMP_SPACING = 0.01;
 
 init();
 animate();
 
 function init(){
 
-scene=new THREE.Scene();
+  scene = new THREE.Scene();
 
-camera=new THREE.PerspectiveCamera(
-70,
-window.innerWidth/window.innerHeight,
-0.01,
-20
-);
+  camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.01, 20);
 
-renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
-renderer.setSize(window.innerWidth,window.innerHeight);
-renderer.xr.enabled=true;
+  renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.xr.enabled = true;
+  document.body.appendChild(renderer.domElement);
 
-document.body.appendChild(renderer.domElement);
+  document.body.appendChild(
+    ARButton.createButton(renderer,{ requiredFeatures:["local-floor"] })
+  );
 
-if(navigator.xr){
+  const light = new THREE.HemisphereLight(0xffffff,0xbbbbff,1);
+  scene.add(light);
 
-document.body.appendChild(
-ARButton.createButton(renderer,{
- requiredFeatures:["local-floor"]
-})
-);
+  createPaper();
+  createBrush();
 
-}
+  // 墨テクスチャ
+  stampTexture = new THREE.TextureLoader().load("ink.png");
+  stampMaterial = new THREE.MeshBasicMaterial({
+    map: stampTexture,
+    transparent: true,
+    depthWrite: false
+  });
 
-const light=new THREE.HemisphereLight(0xffffff,0xbbbbff,1);
-scene.add(light);
+  // コントローラー
+  controller = renderer.xr.getController(0);
+  controller.addEventListener("selectstart", startDraw);
+  controller.addEventListener("selectend", endDraw);
+  controller.addEventListener("connected", e=>{
+    controller.gamepad = e.data.gamepad;
+  });
+  scene.add(controller);
 
-createPaper();
-createBrush();
+  createText("山");
 
-controller=renderer.xr.getController(0);
-
-controller.addEventListener("selectstart",()=>{
- drawing=true;
- prevPoint=null;
-});
-
-controller.addEventListener("selectend",()=>{
- drawing=false;
-});
-
-scene.add(controller);
-
-window.addEventListener("resize",resize);
+  window.addEventListener("resize", onResize);
 
 }
 
 function createPaper(){
 
-const geo=new THREE.PlaneGeometry(1.4,0.9);
+  const geo = new THREE.PlaneGeometry(1.4,0.9);
 
-const mat=new THREE.MeshBasicMaterial({
- color:0xffffff,
- transparent:true,
- opacity:0.6,
- side:THREE.DoubleSide
-});
+  const mat = new THREE.MeshBasicMaterial({
+    color:0xffffff,
+    transparent:true,
+    opacity:0.5,
+    side:THREE.DoubleSide
+  });
 
-paper=new THREE.Mesh(geo,mat);
-paper.position.set(0,1.4,-1.2);
+  const paper = new THREE.Mesh(geo,mat);
+  paper.position.set(0,1.4,-1.2);
 
-scene.add(paper);
+  scene.add(paper);
 
 }
 
 function createBrush(){
 
-const stick=new THREE.Mesh(
- new THREE.CylinderGeometry(0.005,0.005,0.25),
- new THREE.MeshStandardMaterial({color:0x884400})
-);
+  const stick = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.006,0.006,0.25),
+    new THREE.MeshStandardMaterial({color:0x885522})
+  );
+  stick.position.y = -0.12;
 
-stick.position.y=-0.12;
+  const tip = new THREE.Mesh(
+    new THREE.ConeGeometry(0.015,0.05),
+    new THREE.MeshStandardMaterial({color:0x111111})
+  );
+  tip.position.y = -0.28;
 
-const tip=new THREE.Mesh(
- new THREE.ConeGeometry(0.015,0.05),
- new THREE.MeshStandardMaterial({color:0x111111})
-);
+  const brush = new THREE.Group();
+  brush.add(stick);
+  brush.add(tip);
 
-tip.position.y=-0.28;
-
-const brush=new THREE.Group();
-brush.add(stick);
-brush.add(tip);
-
-controller=renderer.xr.getController(0);
-controller.add(brush);
+  controller = renderer.xr.getController(0);
+  controller.add(brush);
 
 }
 
-function getDrawPoint(){
+function createText(str){
 
-tempMatrix.identity().extractRotation(controller.matrixWorld);
+  const loader = new FontLoader();
 
-raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+  loader.load(
+    "https://cdn.jsdelivr.net/npm/three@0.160/examples/fonts/helvetiker_regular.typeface.json",
+    font=>{
+      const geo = new TextGeometry(str,{
+        font:font,
+        size:0.25,
+        height:0.01
+      });
 
-raycaster.ray.direction
-.set(0,0,-1)
-.applyMatrix4(tempMatrix);
+      const mat = new THREE.MeshBasicMaterial({
+        color:0x777777,
+        transparent:true,
+        opacity:0.3
+      });
 
-const hit=raycaster.intersectObject(paper);
+      const mesh = new THREE.Mesh(geo,mat);
+      mesh.position.set(-0.15,1.45,-1.19);
 
-if(hit.length>0){
-
-return hit[0].point;
+      scene.add(mesh);
+    }
+  );
 
 }
 
-return null;
+function startDraw(){
+  drawing = true;
+  prevPoint = getTipPosition();
+}
 
+function endDraw(){
+  drawing = false;
+  // はらい
+  for(let i=0;i<5;i++){
+    brushWidth *= 0.7;
+    addStamp(prevPoint, brushWidth);
+  }
+}
+
+function getTipPosition(){
+  const pos = new THREE.Vector3();
+  pos.setFromMatrixPosition(controller.matrixWorld);
+  return pos;
 }
 
 function updateBrush(){
 
-const point=getDrawPoint();
+  const point = getTipPosition();
 
-if(!point) return;
+  if(!prevPoint){
+    prevPoint = point;
+    return;
+  }
 
-if(!prevPoint){
+  const dist = point.distanceTo(prevPoint);
+  const speed = dist / clock.getDelta();
 
-prevPoint=point;
-return;
+  const targetWidth = THREE.MathUtils.clamp(
+    0.05/(speed+0.1),
+    MIN_WIDTH,
+    MAX_WIDTH
+  );
 
-}
+  brushWidth = THREE.MathUtils.lerp(brushWidth,targetWidth,WIDTH_SMOOTH);
 
-const speed=point.distanceTo(prevPoint);
+  if(dist > STAMP_SPACING){
 
-const targetWidth=THREE.MathUtils.clamp(
-0.04/(speed+0.001),
-0.01,
-0.06
-);
+    const steps = Math.floor(dist / STAMP_SPACING);
 
-width=THREE.MathUtils.lerp(width,targetWidth,0.3);
+    for(let i=0;i<steps;i++){
 
-const dist=point.distanceTo(prevPoint);
+      const p = prevPoint.clone().lerp(point, i/steps);
+      addStamp(p, brushWidth);
 
-const steps=Math.floor(dist/0.01);
+    }
 
-for(let i=0;i<steps;i++){
+    prevPoint = point;
 
-const p=prevPoint.clone().lerp(point,i/steps);
-
-stamp(p,width);
-
-}
-
-prevPoint=point;
+  }
 
 }
 
-function stamp(pos,size){
+function addStamp(pos, size){
 
-const geo=new THREE.PlaneGeometry(size,size);
+  const geo = new THREE.PlaneGeometry(size,size);
 
-const mesh=new THREE.Mesh(geo,brushMaterial);
+  const mesh = new THREE.Mesh(geo, stampMaterial);
 
-mesh.position.copy(pos);
+  mesh.position.copy(pos);
+  mesh.lookAt(camera.position);
 
-mesh.lookAt(camera.position);
-
-scene.add(mesh);
-
-stamps.push(mesh);
+  scene.add(mesh);
+  stamps.push(mesh);
 
 }
 
 function clearAll(){
 
-for(const s of stamps){
-
-scene.remove(s);
-
-}
-
-stamps.length=0;
+  for(const s of stamps){
+    scene.remove(s);
+  }
+  stamps.length = 0;
 
 }
 
 function animate(){
-
-renderer.setAnimationLoop(render);
-
+  renderer.setAnimationLoop(render);
 }
 
 function render(){
 
-if(drawing){
+  if(drawing){
+    updateBrush();
+  }
 
-updateBrush();
+  // Aボタン
+  if(controller.gamepad){
+    if(controller.gamepad.buttons[4] && controller.gamepad.buttons[4].pressed){
+      clearAll();
+    }
+  }
 
-}
-
-renderer.render(scene,camera);
-
-}
-
-function resize(){
-
-camera.aspect=window.innerWidth/window.innerHeight;
-camera.updateProjectionMatrix();
-renderer.setSize(window.innerWidth,window.innerHeight);
+  renderer.render(scene,camera);
 
 }
 
-window.addEventListener("keydown",e=>{
-
-if(e.key==="c") clearAll();
-
-});
+function onResize(){
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth,window.innerHeight);
+}
 
 </script>
-
 </body>
 </html>
 ```
