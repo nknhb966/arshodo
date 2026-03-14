@@ -25,7 +25,7 @@ let drawing=false;
 
 const STEP_DISTANCE=0.006;
 
-const MIN_SIZE=0.01;
+const MIN_SIZE=0.001;
 const MAX_SIZE=0.035;
 
 const MAX_STAMPS=15000;
@@ -192,11 +192,15 @@ interp.lerpVectors(lastPos,pos,t);
 
 const trigger = getTriggerValue();
 
-let size = THREE.MathUtils.lerp(
+let pressureSize = THREE.MathUtils.lerp(MIN_SIZE,MAX_SIZE,trigger);
+
+let speedSize = THREE.MathUtils.clamp(
+MAX_SIZE - dist*2,
 MIN_SIZE,
-MAX_SIZE,
-trigger
+MAX_SIZE
 );
+
+let size = (pressureSize + speedSize) * 0.5;
 
 stamp(interp,size);
 
