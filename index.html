@@ -157,18 +157,19 @@ pos.setFromMatrixPosition(controller.matrixWorld);
 
 if(hasLast){
 
-const dist=pos.distanceTo(lastPos);
+const dist = pos.distanceTo(lastPos);
 
-const steps=Math.floor(dist/STEP_DISTANCE);
+/* 最低1ステップ保証 */
+const steps = Math.max(1, Math.floor(dist / STEP_DISTANCE));
 
 for(let i=1;i<=steps;i++){
 
-const t=i/steps;
+const t = i/steps;
 
 interp.lerpVectors(lastPos,pos,t);
 
-let size=THREE.MathUtils.clamp(
-MAX_SIZE-dist*2,
+let size = THREE.MathUtils.clamp(
+MAX_SIZE - dist*2,
 MIN_SIZE,
 MAX_SIZE
 );
@@ -180,7 +181,7 @@ stamp(interp,size);
 }
 
 lastPos.copy(pos);
-hasLast=true;
+hasLast = true;
 
 }
 
