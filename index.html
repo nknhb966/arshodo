@@ -192,15 +192,11 @@ interp.lerpVectors(lastPos,pos,t);
 
 const trigger = getTriggerValue();
 
-let pressureSize = THREE.MathUtils.lerp(MIN_SIZE,MAX_SIZE,trigger);
-
-let speedSize = THREE.MathUtils.clamp(
-MAX_SIZE - dist*2,
+let size = THREE.MathUtils.lerp(
 MIN_SIZE,
-MAX_SIZE
+MAX_SIZE,
+trigger
 );
-
-let size = (pressureSize + speedSize) * 0.5;
 
 stamp(interp,size);
 
