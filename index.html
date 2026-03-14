@@ -1,10 +1,11 @@
+```html
 <!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道</title>
+<title>AR書道（安定版）</title>
 <style>
-body{margin:0;overflow:hidden;background:#000;}
+body{margin:0;overflow:hidden;}
 </style>
 </head>
 
@@ -19,23 +20,16 @@ let scene,camera,renderer;
 let controller;
 
 let paper;
-let drawing=false;
 
-let prevPoint=null;
-let width=0.03;
+let drawing=false;
+let prevUV=null;
+
+let canvas,ctx,texture;
+let brushImg=new Image();
+brushImg.src="ink.png";
 
 const raycaster=new THREE.Raycaster();
 const tempMatrix=new THREE.Matrix4();
-
-const stamps=[];
-
-const texture=new THREE.TextureLoader().load("ink.png");
-
-const brushMaterial=new THREE.MeshBasicMaterial({
- map:texture,
- transparent:true,
- depthWrite:false
-});
 
 init();
 animate();
@@ -58,30 +52,27 @@ renderer.xr.enabled=true;
 document.body.appendChild(renderer.domElement);
 
 if(navigator.xr){
-
 document.body.appendChild(
-ARButton.createButton(renderer,{
- requiredFeatures:["local-floor"]
-})
+ARButton.createButton(renderer,{requiredFeatures:["local-floor"]})
 );
-
 }
 
 const light=new THREE.HemisphereLight(0xffffff,0xbbbbff,1);
 scene.add(light);
 
+createCanvas();
 createPaper();
 createBrush();
 
 controller=renderer.xr.getController(0);
 
 controller.addEventListener("selectstart",()=>{
- drawing=true;
- prevPoint=null;
+drawing=true;
+prevUV=null;
 });
 
 controller.addEventListener("selectend",()=>{
- drawing=false;
+drawing=false;
 });
 
 scene.add(controller);
@@ -90,20 +81,34 @@ window.addEventListener("resize",resize);
 
 }
 
+function createCanvas(){
+
+canvas=document.createElement("canvas");
+canvas.width=1024;
+canvas.height=1024;
+
+ctx=canvas.getContext("2d");
+
+ctx.fillStyle="#ffffff";
+ctx.fillRect(0,0,canvas.width,canvas.height);
+
+texture=new THREE.CanvasTexture(canvas);
+
+}
+
 function createPaper(){
 
 const geo=new THREE.PlaneGeometry(1.4,0.9);
 
 const mat=new THREE.MeshBasicMaterial({
- color:0xffffff,
- transparent:true,
- opacity:0.6,
- side:THREE.DoubleSide
+map:texture,
+side:THREE.FrontSide
 });
 
 paper=new THREE.Mesh(geo,mat);
-paper.position.set(0,0.3,-1.0);
-paper.rotation.x = -0.15;
+
+paper.position.set(0,1.1,-1.0);
+
 scene.add(paper);
 
 }
@@ -111,15 +116,15 @@ scene.add(paper);
 function createBrush(){
 
 const stick=new THREE.Mesh(
- new THREE.CylinderGeometry(0.005,0.005,0.25),
- new THREE.MeshStandardMaterial({color:0x884400})
+new THREE.CylinderGeometry(0.005,0.005,0.25),
+new THREE.MeshStandardMaterial({color:0x884400})
 );
 
 stick.position.y=-0.12;
 
 const tip=new THREE.Mesh(
- new THREE.ConeGeometry(0.015,0.05),
- new THREE.MeshStandardMaterial({color:0x111111})
+new THREE.ConeGeometry(0.015,0.05),
+new THREE.MeshStandardMaterial({color:0x111111})
 );
 
 tip.position.y=-0.28;
@@ -133,7 +138,7 @@ controller.add(brush);
 
 }
 
-function getDrawPoint(){
+function getUV(){
 
 tempMatrix.identity().extractRotation(controller.matrixWorld);
 
@@ -147,7 +152,7 @@ const hit=raycaster.intersectObject(paper);
 
 if(hit.length>0){
 
-return hit[0].point;
+return hit[0].uv;
 
 }
 
@@ -155,70 +160,46 @@ return null;
 
 }
 
-function updateBrush(){
+function draw(){
 
-const point=getDrawPoint();
+const uv=getUV();
 
-if(!point) return;
+if(!uv) return;
 
-if(!prevPoint){
+const x=uv.x*canvas.width;
+const y=(1-uv.y)*canvas.height;
 
-prevPoint=point;
-return;
+const size=40;
 
-}
+if(prevUV){
 
-const speed=point.distanceTo(prevPoint);
+const px=prevUV.x*canvas.width;
+const py=(1-prevUV.y)*canvas.height;
 
-const targetWidth=THREE.MathUtils.clamp(
-0.04/(speed+0.001),
-0.01,
-0.06
-);
+const dist=Math.hypot(x-px,y-py);
 
-width=THREE.MathUtils.lerp(width,targetWidth,0.3);
-
-const dist=point.distanceTo(prevPoint);
-
-const steps=Math.floor(dist/0.01);
+const steps=Math.floor(dist/5);
 
 for(let i=0;i<steps;i++){
 
-const p=prevPoint.clone().lerp(point,i/steps);
+const t=i/steps;
 
-stamp(p,width);
+const dx=px+(x-px)*t;
+const dy=py+(y-py)*t;
 
-}
-
-prevPoint=point;
-
-}
-
-function stamp(pos,size){
-
-const geo = new THREE.PlaneGeometry(size,size);
-
-const mesh = new THREE.Mesh(geo,brushMaterial);
-
-mesh.position.copy(pos);
-
-mesh.quaternion.copy(paper.quaternion);
-
-scene.add(mesh);
-
-stamps.push(mesh);
+ctx.drawImage(brushImg,dx-size/2,dy-size/2,size,size);
 
 }
 
-function clearAll(){
+}else{
 
-for(const s of stamps){
-
-scene.remove(s);
+ctx.drawImage(brushImg,x-size/2,y-size/2,size,size);
 
 }
 
-stamps.length=0;
+texture.needsUpdate=true;
+
+prevUV=uv;
 
 }
 
@@ -231,9 +212,7 @@ renderer.setAnimationLoop(render);
 function render(){
 
 if(drawing){
-
-updateBrush();
-
+draw();
 }
 
 renderer.render(scene,camera);
@@ -247,12 +226,6 @@ camera.updateProjectionMatrix();
 renderer.setSize(window.innerWidth,window.innerHeight);
 
 }
-
-window.addEventListener("keydown",e=>{
-
-if(e.key==="c") clearAll();
-
-});
 
 </script>
 
