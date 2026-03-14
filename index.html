@@ -150,6 +150,30 @@ hasLast=false;
 
 }
 
+function getTriggerValue(){
+
+const session = renderer.xr.getSession();
+if(!session) return 0;
+
+for(const source of session.inputSources){
+
+if(!source.gamepad) continue;
+
+const axes = source.gamepad.axes;
+
+// Questは index2 がトリガー
+if(axes.length > 2){
+
+return (axes[2] + 1) * 0.5;
+
+}
+
+}
+
+return 0;
+
+}
+
 function draw(){
 
 pos.setFromMatrixPosition(controller.matrixWorld);
@@ -166,11 +190,17 @@ const t = i/steps;
 
 interp.lerpVectors(lastPos,pos,t);
 
-let size = THREE.MathUtils.clamp(
+const trigger = getTriggerValue();
+
+let pressureSize = THREE.MathUtils.lerp(MIN_SIZE,MAX_SIZE,trigger);
+
+let speedSize = THREE.MathUtils.clamp(
 MAX_SIZE - dist*2,
 MIN_SIZE,
 MAX_SIZE
 );
+
+let size = (pressureSize + speedSize) * 0.5;
 
 stamp(interp,size);
 
