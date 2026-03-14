@@ -2,15 +2,13 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR空中書道 進化版</title>
-
+<title>AR空中書道 完成版</title>
 <style>
 body{
 margin:0;
 overflow:hidden;
 }
 </style>
-
 </head>
 
 <body>
@@ -25,19 +23,14 @@ let controller;
 
 let drawing=false;
 
-let points=[];
-let meshes=[];
-let fallingMeshes=[];
+let strokeMeshes=[];
+let strokeGeometry;
+let strokeMesh;
 
-let brushSize=0.02;
+let vertices=[];
+let indices=[];
 
-const gravity=-0.003;
-
-const textureLoader=new THREE.TextureLoader();
-const inkTexture=textureLoader.load("ink.png");
-
-init();
-animate();
+let lastPos=null;
 
 function init(){
 
@@ -50,11 +43,7 @@ window.innerWidth/window.innerHeight,
 20
 );
 
-renderer=new THREE.WebGLRenderer({
-antialias:true,
-alpha:true
-});
-
+renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
 renderer.setSize(window.innerWidth,window.innerHeight);
 renderer.xr.enabled=true;
 
@@ -63,9 +52,7 @@ document.body.appendChild(renderer.domElement);
 if(navigator.xr){
 
 document.body.appendChild(
-ARButton.createButton(renderer,{
-requiredFeatures:["local-floor"]
-})
+ARButton.createButton(renderer,{requiredFeatures:["local-floor"]})
 );
 
 }
@@ -78,10 +65,8 @@ controller=renderer.xr.getController(0);
 controller.addEventListener("selectstart",startDraw);
 controller.addEventListener("selectend",endDraw);
 
-controller.addEventListener("connected",(event)=>{
-
-controller.gamepad=event.data.gamepad;
-
+controller.addEventListener("connected",(e)=>{
+controller.gamepad=e.data.gamepad;
 });
 
 scene.add(controller);
@@ -89,6 +74,8 @@ scene.add(controller);
 createBrush();
 
 window.addEventListener("resize",resize);
+
+renderer.setAnimationLoop(render);
 
 }
 
@@ -119,26 +106,31 @@ controller.add(brush);
 function startDraw(){
 
 drawing=true;
-points=[];
+
+vertices=[];
+indices=[];
+lastPos=null;
+
+strokeGeometry=new THREE.BufferGeometry();
+
+const material=new THREE.MeshStandardMaterial({
+color:0x111111,
+side:THREE.DoubleSide,
+roughness:1
+});
+
+strokeMesh=new THREE.Mesh(strokeGeometry,material);
+
+scene.add(strokeMesh);
+
+strokeMeshes.push(strokeMesh);
 
 }
 
 function endDraw(){
 
 drawing=false;
-
-setTimeout(()=>{
-
-meshes.forEach(m=>{
-fallingMeshes.push({
-mesh:m,
-velocity:0
-});
-});
-
-meshes=[];
-
-},1500);
+lastPos=null;
 
 }
 
@@ -147,63 +139,67 @@ function draw(){
 const pos=new THREE.Vector3();
 pos.setFromMatrixPosition(controller.matrixWorld);
 
-points.push(pos.clone());
+if(lastPos===null){
 
-if(points.length<2) return;
-
-const prev=points[points.length-2];
-const curr=points[points.length-1];
-
-const dist=prev.distanceTo(curr);
-
-const geometry=new THREE.CylinderGeometry(
-brushSize,
-brushSize,
-dist,
-6
-);
-
-const material=new THREE.MeshStandardMaterial({
-map:inkTexture,
-transparent:true,
-roughness:1
-});
-
-const mesh=new THREE.Mesh(geometry,material);
-
-const mid=new THREE.Vector3().addVectors(prev,curr).multiplyScalar(0.5);
-
-mesh.position.copy(mid);
-
-mesh.lookAt(curr);
-mesh.rotateX(Math.PI/2);
-
-scene.add(mesh);
-
-meshes.push(mesh);
+lastPos=pos;
+return;
 
 }
 
-function updateGravity(){
+const dist=pos.distanceTo(lastPos);
 
-fallingMeshes.forEach(obj=>{
+if(dist<0.003) return;
 
-obj.velocity+=gravity;
+const speed=dist;
 
-obj.mesh.position.y+=obj.velocity;
+const width=THREE.MathUtils.clamp(
+0.04-speed*2,
+0.004,
+0.04
+);
 
-});
+const dir=new THREE.Vector3().subVectors(pos,lastPos).normalize();
+
+const side=new THREE.Vector3()
+.crossVectors(dir,camera.getWorldDirection(new THREE.Vector3()))
+.normalize()
+.multiplyScalar(width);
+
+const v1=pos.clone().add(side);
+const v2=pos.clone().sub(side);
+
+const baseIndex=vertices.length/3;
+
+vertices.push(v1.x,v1.y,v1.z);
+vertices.push(v2.x,v2.y,v2.z);
+
+if(baseIndex>=2){
+
+indices.push(baseIndex-2,baseIndex-1,baseIndex);
+indices.push(baseIndex,baseIndex-1,baseIndex+1);
+
+}
+
+strokeGeometry.setAttribute(
+"position",
+new THREE.BufferAttribute(new Float32Array(vertices),3)
+);
+
+strokeGeometry.setIndex(indices);
+
+strokeGeometry.computeVertexNormals();
+
+lastPos=pos;
 
 }
 
 function clearAll(){
 
-[...meshes,...fallingMeshes.map(o=>o.mesh)].forEach(m=>{
+strokeMeshes.forEach(m=>{
 scene.remove(m);
 });
 
-meshes=[];
-fallingMeshes=[];
+strokeMeshes=[];
 
 }
 
@@ -214,22 +210,10 @@ if(!controller.gamepad) return;
 const gp=controller.gamepad;
 
 if(gp.buttons[4] && gp.buttons[4].pressed){
+
 clearAll();
-}
-
-if(gp.buttons[5] && gp.buttons[5].pressed){
-brushSize=0.04;
-}
-
-if(gp.buttons[3] && gp.buttons[3].pressed){
-brushSize=0.01;
-}
 
 }
-
-function animate(){
-
-renderer.setAnimationLoop(render);
 
 }
 
@@ -240,8 +224,6 @@ checkButtons();
 if(drawing){
 draw();
 }
-
-updateGravity();
 
 renderer.render(scene,camera);
 
@@ -255,6 +237,8 @@ camera.updateProjectionMatrix();
 renderer.setSize(window.innerWidth,window.innerHeight);
 
 }
+
+init();
 
 </script>
 
