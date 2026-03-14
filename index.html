@@ -167,7 +167,7 @@ const t = i/steps;
 interp.lerpVectors(lastPos,pos,t);
 
 let size = THREE.MathUtils.clamp(
-MAX_SIZE - speed*1.5,
+MAX_SIZE - dist*2,
 MIN_SIZE,
 MAX_SIZE
 );
