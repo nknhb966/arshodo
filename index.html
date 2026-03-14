@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR空中書道（完成版）</title>
+<title>AR空中書道（Quest最適化）</title>
 
 <style>
 body{
@@ -28,7 +28,7 @@ const STEP_DISTANCE=0.006;
 const MIN_SIZE=0.01;
 const MAX_SIZE=0.035;
 
-const MAX_STAMPS=20000;
+const MAX_STAMPS=15000;
 
 let instancedMesh;
 let stampIndex=0;
@@ -36,11 +36,9 @@ let stampIndex=0;
 let inkUpdated=false;
 
 const dummy=new THREE.Object3D();
-
 const pos=new THREE.Vector3();
 const lastPos=new THREE.Vector3();
 const interp=new THREE.Vector3();
-const dir=new THREE.Vector3();
 
 let hasLast=false;
 
@@ -98,7 +96,7 @@ window.addEventListener("resize",resize);
 function createBrush(){
 
 const stick=new THREE.Mesh(
-new THREE.CylinderGeometry(0.005,0.005,0.25,6),
+new THREE.CylinderGeometry(0.005,0.005,0.25,30),
 new THREE.MeshStandardMaterial({color:0x884400})
 );
 
@@ -158,50 +156,40 @@ pos.setFromMatrixPosition(controller.matrixWorld);
 
 if(hasLast){
 
-const dist=pos.distanceTo(lastPos);
+const dist = pos.distanceTo(lastPos);
 
-/* 方向ベクトル */
-dir.subVectors(pos,lastPos).normalize();
-
-const steps=Math.max(1,Math.floor(dist/STEP_DISTANCE));
+/* 最低1ステップ保証 */
+const steps = Math.max(1, Math.floor(dist / STEP_DISTANCE));
 
 for(let i=1;i<=steps;i++){
 
-const t=i/steps;
+const t = i/steps;
 
 interp.lerpVectors(lastPos,pos,t);
 
-let size=THREE.MathUtils.clamp(
-MAX_SIZE-dist*1.5,
+let size = THREE.MathUtils.clamp(
+MAX_SIZE - dist*2,
 MIN_SIZE,
 MAX_SIZE
 );
 
-stamp(interp,size,dir);
+stamp(interp,size);
 
 }
 
 }
 
 lastPos.copy(pos);
-hasLast=true;
+hasLast = true;
 
 }
 
-function stamp(position,size,dir){
+function stamp(position,size){
 
 if(stampIndex>=MAX_STAMPS) return;
 
 dummy.position.copy(position);
-
-dummy.lookAt(
-position.x+dir.x,
-position.y+dir.y,
-position.z+dir.z
-);
-
-/* 筆跡の楕円形状 */
-dummy.scale.set(size*0.6,size*0.6,size*1.8);
+dummy.scale.set(size,size,size);
 
 dummy.updateMatrix();
 
