@@ -2,7 +2,8 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR空中書道 完成版</title>
+<title>AR空中書道</title>
+
 <style>
 body{
 margin:0;
@@ -23,7 +24,8 @@ let controller;
 
 let drawing=false;
 
-let strokeMeshes=[];
+let strokes=[];
+
 let strokeGeometry;
 let strokeMesh;
 
@@ -31,6 +33,8 @@ let vertices=[];
 let indices=[];
 
 let lastPos=null;
+
+init();
 
 function init(){
 
@@ -43,35 +47,32 @@ window.innerWidth/window.innerHeight,
 20
 );
 
-renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
+renderer=new THREE.WebGLRenderer({
+antialias:true,
+alpha:true
+});
+
 renderer.setSize(window.innerWidth,window.innerHeight);
 renderer.xr.enabled=true;
 
 document.body.appendChild(renderer.domElement);
 
-if(navigator.xr){
-
 document.body.appendChild(
-ARButton.createButton(renderer,{requiredFeatures:["local-floor"]})
+ARButton.createButton(renderer,{
+requiredFeatures:["local-floor"]
+})
 );
-
-}
 
 const light=new THREE.HemisphereLight(0xffffff,0xbbbbff,1);
 scene.add(light);
 
 controller=renderer.xr.getController(0);
-
-controller.addEventListener("selectstart",startDraw);
-controller.addEventListener("selectend",endDraw);
-
-controller.addEventListener("connected",(e)=>{
-controller.gamepad=e.data.gamepad;
-});
-
 scene.add(controller);
 
 createBrush();
+
+controller.addEventListener("selectstart",startDraw);
+controller.addEventListener("selectend",endDraw);
 
 window.addEventListener("resize",resize);
 
@@ -123,7 +124,7 @@ strokeMesh=new THREE.Mesh(strokeGeometry,material);
 
 scene.add(strokeMesh);
 
-strokeMeshes.push(strokeMesh);
+strokes.push(strokeMesh);
 
 }
 
@@ -148,35 +149,38 @@ return;
 
 const dist=pos.distanceTo(lastPos);
 
-if(dist<0.003) return;
+if(dist<0.004) return;
 
 const speed=dist;
 
 const width=THREE.MathUtils.clamp(
 0.04-speed*2,
-0.004,
+0.005,
 0.04
 );
 
 const dir=new THREE.Vector3().subVectors(pos,lastPos).normalize();
 
+const camDir=new THREE.Vector3();
+camera.getWorldDirection(camDir);
+
 const side=new THREE.Vector3()
-.crossVectors(dir,camera.getWorldDirection(new THREE.Vector3()))
+.crossVectors(dir,camDir)
 .normalize()
 .multiplyScalar(width);
 
 const v1=pos.clone().add(side);
 const v2=pos.clone().sub(side);
 
-const baseIndex=vertices.length/3;
+const base=vertices.length/3;
 
 vertices.push(v1.x,v1.y,v1.z);
 vertices.push(v2.x,v2.y,v2.z);
 
-if(baseIndex>=2){
+if(base>=2){
 
-indices.push(baseIndex-2,baseIndex-1,baseIndex);
-indices.push(baseIndex,baseIndex-1,baseIndex+1);
+indices.push(base-2,base-1,base);
+indices.push(base,base-1,base+1);
 
 }
 
@@ -187,7 +191,10 @@ new THREE.BufferAttribute(new Float32Array(vertices),3)
 
 strokeGeometry.setIndex(indices);
 
+strokeGeometry.attributes.position.needsUpdate=true;
+
 strokeGeometry.computeVertexNormals();
+strokeGeometry.computeBoundingSphere();
 
 lastPos=pos;
 
@@ -195,23 +202,31 @@ lastPos=pos;
 
 function clearAll(){
 
-strokeMeshes.forEach(m=>{
+strokes.forEach(m=>{
 scene.remove(m);
 });
 
-strokeMeshes=[];
+strokes=[];
 
 }
 
 function checkButtons(){
 
-if(!controller.gamepad) return;
+const session=renderer.xr.getSession();
 
-const gp=controller.gamepad;
+if(!session) return;
+
+for(const source of session.inputSources){
+
+if(!source.gamepad) continue;
+
+const gp=source.gamepad;
 
 if(gp.buttons[4] && gp.buttons[4].pressed){
 
 clearAll();
+
+}
 
 }
 
@@ -237,8 +252,6 @@ camera.updateProjectionMatrix();
 renderer.setSize(window.innerWidth,window.innerHeight);
 
 }
-
-init();
 
 </script>
 
