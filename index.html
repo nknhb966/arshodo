@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR空中書道</title>
+<title>AR空中書道a</title>
 
 <style>
 body{
@@ -24,17 +24,12 @@ let controller;
 
 let drawing=false;
 
+let points=[];
 let strokes=[];
-
-let strokeGeometry;
-let strokeMesh;
-
-let vertices=[];
-let indices=[];
-
-let lastPos=null;
+let currentMesh=null;
 
 init();
+animate();
 
 function init(){
 
@@ -57,26 +52,29 @@ renderer.xr.enabled=true;
 
 document.body.appendChild(renderer.domElement);
 
+if(navigator.xr){
+
 document.body.appendChild(
 ARButton.createButton(renderer,{
 requiredFeatures:["local-floor"]
 })
 );
 
+}
+
 const light=new THREE.HemisphereLight(0xffffff,0xbbbbff,1);
 scene.add(light);
 
 controller=renderer.xr.getController(0);
-scene.add(controller);
-
-createBrush();
 
 controller.addEventListener("selectstart",startDraw);
 controller.addEventListener("selectend",endDraw);
 
-window.addEventListener("resize",resize);
+scene.add(controller);
 
-renderer.setAnimationLoop(render);
+createBrush();
+
+window.addEventListener("resize",resize);
 
 }
 
@@ -107,31 +105,47 @@ controller.add(brush);
 function startDraw(){
 
 drawing=true;
-
-vertices=[];
-indices=[];
-lastPos=null;
-
-strokeGeometry=new THREE.BufferGeometry();
-
-const material=new THREE.MeshStandardMaterial({
-color:0x111111,
-side:THREE.DoubleSide,
-roughness:1
-});
-
-strokeMesh=new THREE.Mesh(strokeGeometry,material);
-
-scene.add(strokeMesh);
-
-strokes.push(strokeMesh);
+points=[];
+currentMesh=null;
 
 }
 
 function endDraw(){
 
 drawing=false;
-lastPos=null;
+
+if(currentMesh){
+strokes.push(currentMesh);
+}
+
+}
+
+function updateStroke(){
+
+if(points.length<2) return;
+
+const curve=new THREE.CatmullRomCurve3(points);
+
+const geometry=new THREE.TubeGeometry(
+curve,
+points.length*2,
+0.01,
+6,
+false
+);
+
+const material=new THREE.MeshStandardMaterial({
+color:0x111111,
+roughness:1
+});
+
+if(currentMesh){
+scene.remove(currentMesh);
+}
+
+currentMesh=new THREE.Mesh(geometry,material);
+
+scene.add(currentMesh);
 
 }
 
@@ -140,89 +154,38 @@ function draw(){
 const pos=new THREE.Vector3();
 pos.setFromMatrixPosition(controller.matrixWorld);
 
-if(lastPos===null){
+points.push(pos.clone());
 
-lastPos=pos;
-return;
-
-}
-
-const dist=pos.distanceTo(lastPos);
-
-if(dist<0.004) return;
-
-const speed=dist;
-
-const width=THREE.MathUtils.clamp(
-0.04-speed*2,
-0.005,
-0.04
-);
-
-const dir=new THREE.Vector3().subVectors(pos,lastPos).normalize();
-
-const camDir=new THREE.Vector3();
-camera.getWorldDirection(camDir);
-
-const side=new THREE.Vector3()
-.crossVectors(dir,camDir)
-.normalize()
-.multiplyScalar(width);
-
-const v1=pos.clone().add(side);
-const v2=pos.clone().sub(side);
-
-const base=vertices.length/3;
-
-vertices.push(v1.x,v1.y,v1.z);
-vertices.push(v2.x,v2.y,v2.z);
-
-if(base>=2){
-
-indices.push(base-2,base-1,base);
-indices.push(base,base-1,base+1);
-
-}
-
-strokeGeometry.setAttribute(
-"position",
-new THREE.BufferAttribute(new Float32Array(vertices),3)
-);
-
-strokeGeometry.setIndex(indices);
-
-strokeGeometry.attributes.position.needsUpdate=true;
-
-strokeGeometry.computeVertexNormals();
-strokeGeometry.computeBoundingSphere();
-
-lastPos=pos;
+updateStroke();
 
 }
 
 function clearAll(){
 
-strokes.forEach(m=>{
-scene.remove(m);
-});
+for(const s of strokes){
+scene.remove(s);
+}
 
 strokes=[];
 
 }
 
-function checkButtons(){
+function checkClear(){
 
 const session=renderer.xr.getSession();
-
 if(!session) return;
 
 for(const source of session.inputSources){
 
 if(!source.gamepad) continue;
 
-const gp=source.gamepad;
+const buttons=source.gamepad.buttons;
 
-if(gp.buttons[4] && gp.buttons[4].pressed){
+if(buttons.length>4){
+
+const aButton=buttons[4];
+
+if(aButton.pressed){
 
 clearAll();
 
@@ -232,13 +195,21 @@ clearAll();
 
 }
 
-function render(){
+}
 
-checkButtons();
+function animate(){
+
+renderer.setAnimationLoop(render);
+
+}
+
+function render(){
 
 if(drawing){
 draw();
 }
+
+checkClear();
 
 renderer.render(scene,camera);
 
