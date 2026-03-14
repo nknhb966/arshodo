@@ -126,7 +126,19 @@ if(lastPos){
 
 const dist=pos.distanceTo(lastPos);
 
-if(dist<STEP_DISTANCE) return;
+const steps=Math.floor(dist / STEP_DISTANCE);
+
+if(steps > 0){
+
+for(let i=1;i<=steps;i++){
+
+const t=i/steps;
+
+const interp=new THREE.Vector3().lerpVectors(
+lastPos,
+pos,
+t
+);
 
 const speed=dist;
 
@@ -136,7 +148,11 @@ MIN_SIZE,
 MAX_SIZE
 );
 
-stamp(pos,size);
+stamp(interp,size);
+
+}
+
+}
 
 }
 
