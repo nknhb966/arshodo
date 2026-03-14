@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR空中書道（Quest最適化）</title>
+<title>AR空中書道</title>
 
 <style>
 body{
@@ -192,15 +192,11 @@ interp.lerpVectors(lastPos,pos,t);
 
 const trigger = getTriggerValue();
 
-let pressureSize = THREE.MathUtils.lerp(MIN_SIZE,MAX_SIZE,trigger);
-
-let speedSize = THREE.MathUtils.clamp(
-MAX_SIZE - dist*2,
+let size = THREE.MathUtils.lerp(
 MIN_SIZE,
-MAX_SIZE
+MAX_SIZE,
+trigger
 );
-
-let size = (pressureSize + speedSize) * 0.5;
 
 stamp(interp,size);
 
