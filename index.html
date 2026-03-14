@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR空中書道</title>
+<title>AR空中書道 完成版</title>
 
 <style>
 body{
@@ -26,7 +26,9 @@ let controller;
 let drawing=false;
 
 let points=[];
-let tubeMesh=null;
+let strokeMeshes=[];
+
+let lastPos=null;
 
 init();
 animate();
@@ -70,6 +72,12 @@ controller=renderer.xr.getController(0);
 controller.addEventListener("selectstart",startDraw);
 controller.addEventListener("selectend",endDraw);
 
+controller.addEventListener("connected", (event)=>{
+
+controller.gamepad=event.data.gamepad;
+
+});
+
 scene.add(controller);
 
 createBrush();
@@ -106,39 +114,15 @@ function startDraw(){
 
 drawing=true;
 points=[];
+lastPos=null;
 
 }
 
 function endDraw(){
 
 drawing=false;
-
-}
-
-function updateStroke(){
-
-if(points.length<2) return;
-
-const curve=new THREE.CatmullRomCurve3(points);
-
-const geometry=new THREE.TubeGeometry(
-curve,
-points.length*2,
-0.01,
-6,
-false
-);
-
-const material=new THREE.MeshStandardMaterial({
-color:0x111111,
-roughness:1
-});
-
-if(tubeMesh) scene.remove(tubeMesh);
-
-tubeMesh=new THREE.Mesh(geometry,material);
-
-scene.add(tubeMesh);
+points=[];
+lastPos=null;
 
 }
 
@@ -149,7 +133,63 @@ pos.setFromMatrixPosition(controller.matrixWorld);
 
 points.push(pos.clone());
 
-updateStroke();
+if(points.length<2) return;
+
+const prev=points[points.length-2];
+const curr=points[points.length-1];
+
+const dist=prev.distanceTo(curr);
+
+const radius=THREE.MathUtils.clamp(0.02/dist,0.003,0.02);
+
+const geometry=new THREE.CylinderGeometry(
+radius,
+radius,
+dist,
+6
+);
+
+const material=new THREE.MeshStandardMaterial({
+color:0x111111,
+roughness:1
+});
+
+const mesh=new THREE.Mesh(geometry,material);
+
+const mid=new THREE.Vector3().addVectors(prev,curr).multiplyScalar(0.5);
+
+mesh.position.copy(mid);
+
+mesh.lookAt(curr);
+mesh.rotateX(Math.PI/2);
+
+scene.add(mesh);
+
+strokeMeshes.push(mesh);
+
+}
+
+function clearAll(){
+
+strokeMeshes.forEach(m=>{
+scene.remove(m);
+});
+
+strokeMeshes=[];
+
+}
+
+function checkButtons(){
+
+if(!controller.gamepad) return;
+
+const gp=controller.gamepad;
+
+if(gp.buttons[4] && gp.buttons[4].pressed){
+
+clearAll();
+
+}
 
 }
 
@@ -160,6 +200,8 @@ renderer.setAnimationLoop(render);
 }
 
 function render(){
+
+checkButtons();
 
 if(drawing){
 draw();
