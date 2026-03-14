@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR空中書道（球スタンプ）</title>
+<title>AR空中書道 Instanced版</title>
 
 <style>
 body{
@@ -23,14 +23,19 @@ let scene,camera,renderer;
 let controller;
 
 let drawing=false;
-
-let strokes=[];
 let lastPos=null;
 
-const MIN_SIZE=0.008;
-const MAX_SIZE=0.035;
+const STEP_DISTANCE=0.004;
 
-const STEP_DISTANCE=0.01;
+const MIN_SIZE=0.01;
+const MAX_SIZE=0.04;
+
+const MAX_STAMPS=20000;
+
+let instancedMesh;
+let stampIndex=0;
+
+const dummy=new THREE.Object3D();
 
 init();
 animate();
@@ -57,23 +62,27 @@ renderer.xr.enabled=true;
 document.body.appendChild(renderer.domElement);
 
 if(navigator.xr){
+
 document.body.appendChild(
 ARButton.createButton(renderer,{
 requiredFeatures:["local-floor"]
 })
 );
+
 }
 
 const light=new THREE.HemisphereLight(0xffffff,0xbbbbff,1);
 scene.add(light);
 
 controller=renderer.xr.getController(0);
+
 controller.addEventListener("selectstart",startDraw);
 controller.addEventListener("selectend",endDraw);
 
 scene.add(controller);
 
 createBrush();
+createInkSystem();
 
 window.addEventListener("resize",resize);
 
@@ -103,6 +112,25 @@ controller.add(brush);
 
 }
 
+function createInkSystem(){
+
+const geo=new THREE.SphereGeometry(1,6,6);
+
+const mat=new THREE.MeshStandardMaterial({
+color:0x111111,
+roughness:1
+});
+
+instancedMesh=new THREE.InstancedMesh(
+geo,
+mat,
+MAX_STAMPS
+);
+
+scene.add(instancedMesh);
+
+}
+
 function startDraw(){
 
 drawing=true;
@@ -126,9 +154,7 @@ if(lastPos){
 
 const dist=pos.distanceTo(lastPos);
 
-const steps=Math.floor(dist / STEP_DISTANCE);
-
-if(steps > 0){
+const steps=Math.floor(dist/STEP_DISTANCE);
 
 for(let i=1;i<=steps;i++){
 
@@ -154,38 +180,30 @@ stamp(interp,size);
 
 }
 
-}
-
 lastPos=pos;
 
 }
 
 function stamp(position,size){
 
-const geo=new THREE.SphereGeometry(size,8,8);
+if(stampIndex>=MAX_STAMPS) return;
 
-const mat=new THREE.MeshStandardMaterial({
-color:0x111111,
-roughness:1
-});
+dummy.position.copy(position);
+dummy.scale.set(size,size,size);
 
-const mesh=new THREE.Mesh(geo,mat);
+dummy.updateMatrix();
 
-mesh.position.copy(position);
+instancedMesh.setMatrixAt(stampIndex,dummy.matrix);
 
-scene.add(mesh);
+stampIndex++;
 
-strokes.push(mesh);
+instancedMesh.instanceMatrix.needsUpdate=true;
 
 }
 
 function clearAll(){
 
-for(const s of strokes){
-scene.remove(s);
-}
-
-strokes=[];
+stampIndex=0;
 
 }
 
