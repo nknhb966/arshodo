@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR空中書道a</title>
+<title>AR空中書道（筆圧版）</title>
 
 <style>
 body{
@@ -24,9 +24,13 @@ let controller;
 
 let drawing=false;
 
-let points=[];
 let strokes=[];
-let currentMesh=null;
+
+let currentStroke=[];
+let lastPos=null;
+
+const MIN_WIDTH=0.005;
+const MAX_WIDTH=0.03;
 
 init();
 animate();
@@ -53,13 +57,11 @@ renderer.xr.enabled=true;
 document.body.appendChild(renderer.domElement);
 
 if(navigator.xr){
-
 document.body.appendChild(
 ARButton.createButton(renderer,{
 requiredFeatures:["local-floor"]
 })
 );
-
 }
 
 const light=new THREE.HemisphereLight(0xffffff,0xbbbbff,1);
@@ -105,8 +107,9 @@ controller.add(brush);
 function startDraw(){
 
 drawing=true;
-points=[];
-currentMesh=null;
+
+currentStroke=[];
+lastPos=null;
 
 }
 
@@ -114,38 +117,15 @@ function endDraw(){
 
 drawing=false;
 
-if(currentMesh){
-strokes.push(currentMesh);
-}
+if(currentStroke.length>0){
+
+const mesh=createStrokeMesh(currentStroke);
+
+scene.add(mesh);
+
+strokes.push(mesh);
 
 }
-
-function updateStroke(){
-
-if(points.length<2) return;
-
-const curve=new THREE.CatmullRomCurve3(points);
-
-const geometry=new THREE.TubeGeometry(
-curve,
-points.length*2,
-0.01,
-6,
-false
-);
-
-const material=new THREE.MeshStandardMaterial({
-color:0x111111,
-roughness:1
-});
-
-if(currentMesh){
-scene.remove(currentMesh);
-}
-
-currentMesh=new THREE.Mesh(geometry,material);
-
-scene.add(currentMesh);
 
 }
 
@@ -154,9 +134,83 @@ function draw(){
 const pos=new THREE.Vector3();
 pos.setFromMatrixPosition(controller.matrixWorld);
 
-points.push(pos.clone());
+let width=MAX_WIDTH;
 
-updateStroke();
+if(lastPos){
+
+const speed=pos.distanceTo(lastPos);
+
+width=THREE.MathUtils.clamp(
+MAX_WIDTH-speed*2,
+MIN_WIDTH,
+MAX_WIDTH
+);
+
+}
+
+currentStroke.push({
+pos:pos.clone(),
+width:width
+});
+
+lastPos=pos;
+
+}
+
+function createStrokeMesh(points){
+
+const vertices=[];
+const indices=[];
+
+for(let i=1;i<points.length;i++){
+
+const p1=points[i-1];
+const p2=points[i];
+
+const dir=new THREE.Vector3().subVectors(p2.pos,p1.pos);
+
+const normal=new THREE.Vector3(
+-dir.z,
+0,
+dir.x
+).normalize();
+
+const v1=p1.pos.clone().addScaledVector(normal,p1.width);
+const v2=p1.pos.clone().addScaledVector(normal,-p1.width);
+
+const v3=p2.pos.clone().addScaledVector(normal,p2.width);
+const v4=p2.pos.clone().addScaledVector(normal,-p2.width);
+
+const base=vertices.length/3;
+
+vertices.push(v1.x,v1.y,v1.z);
+vertices.push(v2.x,v2.y,v2.z);
+vertices.push(v3.x,v3.y,v3.z);
+vertices.push(v4.x,v4.y,v4.z);
+
+indices.push(base,base+1,base+2);
+indices.push(base+2,base+1,base+3);
+
+}
+
+const geometry=new THREE.BufferGeometry();
+
+geometry.setAttribute(
+"position",
+new THREE.Float32BufferAttribute(vertices,3)
+);
+
+geometry.setIndex(indices);
+
+geometry.computeVertexNormals();
+
+const material=new THREE.MeshStandardMaterial({
+color:0x111111,
+roughness:1,
+side:THREE.DoubleSide
+});
+
+return new THREE.Mesh(geometry,material);
 
 }
 
