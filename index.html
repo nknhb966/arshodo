@@ -106,9 +106,9 @@ new THREE.ConeGeometry(0.015,0.05,6),
 new THREE.MeshStandardMaterial({color:0x111111})
 );
 
-tip.position.y = 0;
-tip.rotation.y = -90;
-tip.rotation.z = 90;
+tip.rotation.y = 90;
+tip.rotation.z = -90;
+tip.position.z = 0.05;
 
 const brush=new THREE.Group();
 brush.add(stick);
