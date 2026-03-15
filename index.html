@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>XR空中書道 Quest完全版</title>
+<title>XR空中書道 Quest軽量版</title>
 
 <style>
 body{
@@ -23,15 +23,17 @@ let scene,camera,renderer,controller;
 
 let drawing=false;
 
-const STEP_DISTANCE=0.004;
+const STEP_DISTANCE=0.006;
 
-const MIN_SIZE=0.002;
-const MAX_SIZE=0.035;
+const MIN_SIZE=0.003;
+const MAX_SIZE=0.03;
 
-const MAX_STAMPS=30000;
+const MAX_STAMPS=7000;
 
 let instancedMesh;
 let stampIndex=0;
+
+let inkDirty=false;
 
 const dummy=new THREE.Object3D();
 
@@ -50,6 +52,7 @@ animate();
 function init(){
 
 scene=new THREE.Scene();
+scene.background=new THREE.Color(0xffffff);
 
 camera=new THREE.PerspectiveCamera(
 70,
@@ -60,17 +63,23 @@ window.innerWidth/window.innerHeight,
 
 renderer=new THREE.WebGLRenderer({
 antialias:true,
-alpha:true
+alpha:false
 });
 
-renderer.setSize(window.innerWidth,window.innerHeight);
 renderer.xr.enabled=true;
+
+renderer.setPixelRatio(1);
+
+renderer.setSize(
+window.innerWidth,
+window.innerHeight
+);
 
 document.body.appendChild(renderer.domElement);
 
 document.body.appendChild(VRButton.createButton(renderer));
 
-const light=new THREE.HemisphereLight(0xffffff,0xbbbbff,1);
+const light=new THREE.HemisphereLight(0xffffff,0xcccccc,1);
 scene.add(light);
 
 controller=renderer.xr.getController(0);
@@ -93,7 +102,7 @@ new THREE.MeshStandardMaterial({color:0x884400})
 );
 
 tip=new THREE.Mesh(
-new THREE.ConeGeometry(0.015,0.05,8),
+new THREE.ConeGeometry(0.015,0.05,6),
 new THREE.MeshStandardMaterial({color:0x111111})
 );
 
@@ -114,13 +123,12 @@ controller.add(brush);
 
 function createInk(){
 
-const geo=new THREE.SphereGeometry(1,6,6);
+const geo=new THREE.SphereGeometry(1,4,2);
 
 const mat=new THREE.MeshStandardMaterial({
 color:0x111111,
 roughness:1,
-transparent:true,
-opacity:0.9
+transparent:false
 });
 
 instancedMesh=new THREE.InstancedMesh(
@@ -144,7 +152,11 @@ if(source.gamepad){
 
 const gp=source.gamepad;
 
+if(gp.buttons.length>0){
+
 if(gp.buttons[0].pressed) return 1;
+
+}
 
 }
 
@@ -193,8 +205,6 @@ MAX_SIZE
 
 let size=(pressureSize+speedSize)*0.5;
 
-size*=THREE.MathUtils.randFloat(0.9,1.1);
-
 stamp(interp,size);
 
 }
@@ -218,12 +228,12 @@ instancedMesh.setMatrixAt(stampIndex,dummy.matrix);
 stampIndex++;
 
 if(stampIndex>=MAX_STAMPS){
+
 stampIndex=0;
+
 }
 
-instancedMesh.count=Math.min(stampIndex,MAX_STAMPS);
-
-instancedMesh.instanceMatrix.needsUpdate=true;
+inkDirty=true;
 
 }
 
@@ -256,6 +266,16 @@ drawing=false;
 
 }
 
+if(inkDirty){
+
+instancedMesh.count=Math.min(stampIndex,MAX_STAMPS);
+
+instancedMesh.instanceMatrix.needsUpdate=true;
+
+inkDirty=false;
+
+}
+
 renderer.render(scene,camera);
 
 }
@@ -263,9 +283,13 @@ renderer.render(scene,camera);
 function resize(){
 
 camera.aspect=window.innerWidth/window.innerHeight;
+
 camera.updateProjectionMatrix();
 
-renderer.setSize(window.innerWidth,window.innerHeight);
+renderer.setSize(
+window.innerWidth,
+window.innerHeight
+);
 
 }
 
