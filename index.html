@@ -2,12 +2,13 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR空中書道</title>
+<title>AR空中書道 展示版</title>
 
 <style>
 body{
 margin:0;
 overflow:hidden;
+background:black;
 }
 </style>
 </head>
@@ -20,25 +21,21 @@ import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
 import { ARButton } from "https://unpkg.com/three@0.160.0/examples/jsm/webxr/ARButton.js";
 
 let scene,camera,renderer,controller;
-
 let drawing=false;
 
-const STEP_DISTANCE=0.006;
+let tip;
+let gamepad=null;
 
-const MIN_SIZE=0.001;
-const MAX_SIZE=0.035;
+const MAX_POINTS=5000;
 
-const MAX_STAMPS=15000;
+let positions=[];
+let sizes=[];
+let geometry;
+let material;
+let line;
 
-let instancedMesh;
-let stampIndex=0;
-
-let inkUpdated=false;
-
-const dummy=new THREE.Object3D();
 const pos=new THREE.Vector3();
 const lastPos=new THREE.Vector3();
-const interp=new THREE.Vector3();
 
 let hasLast=false;
 
@@ -61,12 +58,14 @@ antialias:true,
 alpha:true
 });
 
-renderer.setSize(window.innerWidth,window.innerHeight);
 renderer.xr.enabled=true;
 
-document.body.appendChild(renderer.domElement);
+renderer.setSize(
+window.innerWidth,
+window.innerHeight
+);
 
-if(navigator.xr){
+document.body.appendChild(renderer.domElement);
 
 document.body.appendChild(
 ARButton.createButton(renderer,{
@@ -74,180 +73,167 @@ requiredFeatures:["local-floor"]
 })
 );
 
-}
-
 const light=new THREE.HemisphereLight(0xffffff,0xbbbbff,1);
 scene.add(light);
 
 controller=renderer.xr.getController(0);
-
 scene.add(controller);
 
+renderer.xr.addEventListener("sessionstart",setupGamepad);
+
 createBrush();
-createInkSystem();
+createInk();
 
 window.addEventListener("resize",resize);
 
 }
 
+function setupGamepad(){
+
+const session=renderer.xr.getSession();
+
+for(const source of session.inputSources){
+
+if(source.gamepad){
+
+gamepad=source.gamepad;
+
+}
+
+}
+
+}
+
 function createBrush(){
 
-const brush = new THREE.Group();
+const brush=new THREE.Group();
 
-const stick = new THREE.Mesh(
-  new THREE.CylinderGeometry(0.012,0.012,0.25,6),
-  new THREE.MeshStandardMaterial({color:0x884400})
+const stick=new THREE.Mesh(
+new THREE.CylinderGeometry(0.012,0.012,0.25,6),
+new THREE.MeshStandardMaterial({color:0x884400})
 );
 
-const tip = new THREE.Mesh(
-  new THREE.ConeGeometry(0.015,0.05,6),
-  new THREE.MeshStandardMaterial({color:0x111111})
+tip=new THREE.Mesh(
+new THREE.ConeGeometry(0.015,0.05,6),
+new THREE.MeshStandardMaterial({color:0x111111})
 );
 
-stick.rotation.x = Math.PI/2;
-tip.rotation.x = -Math.PI/2;
+stick.rotation.x=Math.PI/2;
+tip.rotation.x=-Math.PI/2;
 
-tip.position.z = 0;
-
-stick.position.z = 0.15;
-
-brush.rotation.z = Math.PI/2;
-brush.rotation.x = -Math.PI/3;
+stick.position.z=0.15;
 
 brush.add(stick);
 brush.add(tip);
+
+brush.rotation.z=Math.PI/2;
+brush.rotation.x=-Math.PI/3;
 
 controller.add(brush);
 
 }
 
-function createInkSystem(){
+function createInk(){
 
-const geo=new THREE.SphereGeometry(1,10,10);
+geometry=new THREE.BufferGeometry();
 
-const mat=new THREE.MeshStandardMaterial({
-color:0x111111,
-roughness:1
-});
+const posArray=new Float32Array(MAX_POINTS*3);
 
-instancedMesh=new THREE.InstancedMesh(
-geo,
-mat,
-MAX_STAMPS
+geometry.setAttribute(
+"position",
+new THREE.BufferAttribute(posArray,3)
 );
 
-scene.add(instancedMesh);
+material=new THREE.LineBasicMaterial({
+color:0x000000,
+transparent:true,
+opacity:0.9
+});
+
+line=new THREE.Line(geometry,material);
+
+scene.add(line);
 
 }
 
-function getTriggerValue(){
+function getTrigger(){
 
-const session = renderer.xr.getSession();
-if(!session) return 0;
+if(!gamepad) return 0;
 
-for(const source of session.inputSources){
-
-if(!source.gamepad) continue;
-
-const buttons = source.gamepad.buttons;
-
-if(buttons.length > 0){
-
-return buttons[0].value; // 0〜1
+return gamepad.buttons[0].value;
 
 }
 
+function getTipPosition(){
+
+const v=new THREE.Vector3();
+
+tip.getWorldPosition(v);
+
+return v;
+
 }
 
-return 0;
+function addPoint(p,size){
+
+if(positions.length>=MAX_POINTS){
+
+positions.shift();
+
+}
+
+positions.push(p.clone());
+
+updateGeometry();
+
+}
+
+function updateGeometry(){
+
+const arr=geometry.attributes.position.array;
+
+for(let i=0;i<positions.length;i++){
+
+arr[i*3]=positions[i].x;
+arr[i*3+1]=positions[i].y;
+arr[i*3+2]=positions[i].z;
+
+}
+
+geometry.setDrawRange(0,positions.length);
+
+geometry.attributes.position.needsUpdate=true;
 
 }
 
 function draw(){
 
-pos.setFromMatrixPosition(controller.matrixWorld);
+pos.copy(getTipPosition());
 
 if(hasLast){
 
-const dist = pos.distanceTo(lastPos);
+const dist=pos.distanceTo(lastPos);
 
-const steps = Math.max(1, Math.floor(dist / STEP_DISTANCE));
+const trigger=getTrigger();
 
-for(let i=1;i<=steps;i++){
-
-const t = i/steps;
-
-interp.lerpVectors(lastPos,pos,t);
-
-const trigger = getTriggerValue();
-
-let pressureSize = THREE.MathUtils.lerp(MIN_SIZE,MAX_SIZE,trigger);
-
-let speedSize = THREE.MathUtils.clamp(
-MAX_SIZE - dist*2,
-MIN_SIZE,
-MAX_SIZE
+let size=THREE.MathUtils.lerp(
+0.002,
+0.03,
+trigger
 );
 
-let size = (pressureSize + speedSize) * 0.5;
+size*=THREE.MathUtils.clamp(
+1.2-dist*20,
+0.3,
+1.2
+);
 
-stamp(interp,size);
-
-}
+addPoint(pos,size);
 
 }
 
 lastPos.copy(pos);
-hasLast = true;
-
-}
-
-function stamp(position,size){
-
-if(stampIndex>=MAX_STAMPS) return;
-
-dummy.position.copy(position);
-dummy.scale.set(size,size,size);
-
-dummy.updateMatrix();
-
-instancedMesh.setMatrixAt(stampIndex,dummy.matrix);
-
-stampIndex++;
-
-inkUpdated=true;
-
-}
-
-function clearAll(){
-
-stampIndex=0;
-instancedMesh.count=0;
-
-}
-
-function checkClear(){
-
-const session=renderer.xr.getSession();
-if(!session) return;
-
-for(const source of session.inputSources){
-
-if(!source.gamepad) continue;
-
-const buttons=source.gamepad.buttons;
-
-if(buttons.length>4){
-
-if(buttons[4].pressed){
-
-clearAll();
-
-}
-
-}
-
-}
+hasLast=true;
 
 }
 
@@ -259,33 +245,24 @@ renderer.setAnimationLoop(render);
 
 function render(){
 
-const trigger = getTriggerValue();
+const trigger=getTrigger();
 
-if(trigger > 0.05){
+if(trigger>0.05){
 
 if(!drawing){
-hasLast = false;
-drawing = true;
+
+drawing=true;
+hasLast=false;
+
 }
 
 draw();
 
 }else{
 
-drawing = false;
+drawing=false;
 
 }
-
-if(inkUpdated){
-
-instancedMesh.count=stampIndex;
-instancedMesh.instanceMatrix.needsUpdate=true;
-
-inkUpdated=false;
-
-}
-
-checkClear();
 
 renderer.render(scene,camera);
 
@@ -294,9 +271,13 @@ renderer.render(scene,camera);
 function resize(){
 
 camera.aspect=window.innerWidth/window.innerHeight;
+
 camera.updateProjectionMatrix();
 
-renderer.setSize(window.innerWidth,window.innerHeight);
+renderer.setSize(
+window.innerWidth,
+window.innerHeight
+);
 
 }
 
