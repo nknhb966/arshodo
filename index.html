@@ -95,7 +95,7 @@ function createBrush(){
 const brush = new THREE.Group();
 
 const stick = new THREE.Mesh(
-  new THREE.CylinderGeometry(0.005,0.005,0.25,6),
+  new THREE.CylinderGeometry(0.015,0.015,0.25,6),
   new THREE.MeshStandardMaterial({color:0x884400})
 );
 
@@ -111,7 +111,7 @@ tip.position.z = 0;
 
 stick.position.z = 0.15;
 
-brush.rotation.z = Math.PI*2/3;
+brush.rotation.z = Math.PI*1/3;
 
 brush.add(stick);
 brush.add(tip);
