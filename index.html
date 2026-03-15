@@ -97,7 +97,8 @@ new THREE.CylinderGeometry(0.005,0.005,0.25,6),
 new THREE.MeshStandardMaterial({color:0x884400})
 );
 
-stick.position.y=-0.12;
+stick.position.y = 0;
+stick.rotation.y = 90;
 stick.rotation.z = 90;
 
 const tip=new THREE.Mesh(
@@ -106,6 +107,7 @@ new THREE.MeshStandardMaterial({color:0x111111})
 );
 
 tip.position.y = 0;
+tip.rotation.y = 90;
 tip.rotation.z = 90;
 
 const brush=new THREE.Group();
