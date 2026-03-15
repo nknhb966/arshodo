@@ -81,9 +81,6 @@ scene.add(light);
 
 controller=renderer.xr.getController(0);
 
-// controller.addEventListener("selectstart",startDraw);
-// controller.addEventListener("selectend",endDraw);
-
 scene.add(controller);
 
 createBrush();
@@ -101,13 +98,15 @@ new THREE.MeshStandardMaterial({color:0x884400})
 );
 
 stick.position.y=-0.12;
+stick.rotation.z = 90;
 
 const tip=new THREE.Mesh(
 new THREE.ConeGeometry(0.015,0.05,6),
 new THREE.MeshStandardMaterial({color:0x111111})
 );
 
-tip.position.y=-0.28;
+tip.position.y = 0;
+tip.rotation.z = 90;
 
 const brush=new THREE.Group();
 brush.add(stick);
@@ -136,20 +135,6 @@ scene.add(instancedMesh);
 
 }
 
-// function startDraw(){
-
-// drawing=true;
-// hasLast=false;
-
-// }
-
-// function endDraw(){
-
-// drawing=false;
-// hasLast=false;
-
-// }
-
 function getTriggerValue(){
 
 const session = renderer.xr.getSession();
@@ -161,7 +146,6 @@ if(!source.gamepad) continue;
 
 const buttons = source.gamepad.buttons;
 
-// index0 がトリガー
 if(buttons.length > 0){
 
 return buttons[0].value; // 0〜1
@@ -275,7 +259,7 @@ const trigger = getTriggerValue();
 if(trigger > 0.05){
 
 if(!drawing){
-hasLast = false; // ←これが重要
+hasLast = false;
 drawing = true;
 }
 
