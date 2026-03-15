@@ -92,25 +92,28 @@ window.addEventListener("resize",resize);
 
 function createBrush(){
 
-const stick=new THREE.Mesh(
-new THREE.CylinderGeometry(0.005,0.005,0.25,6),
-new THREE.MeshStandardMaterial({color:0x884400})
+const brush = new THREE.Group();
+
+const stick = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.005,0.005,0.25,6),
+  new THREE.MeshStandardMaterial({color:0x884400})
 );
 
-stick.rotation.y = 90;
-stick.rotation.z = -90;
-stick.position.z = -0.17;
-
-const tip=new THREE.Mesh(
-new THREE.ConeGeometry(0.015,0.05,6),
-new THREE.MeshStandardMaterial({color:0x111111})
+const tip = new THREE.Mesh(
+  new THREE.ConeGeometry(0.015,0.05,6),
+  new THREE.MeshStandardMaterial({color:0x111111})
 );
 
-tip.rotation.y = 90;
-tip.rotation.z = -90;
-tip.position.z = -0.05;
+stick.rotation.x = Math.PI/2;
+tip.rotation.x = Math.PI/2;
 
-const brush=new THREE.Group();
+tip.position.z = 0;
+
+stick.position.z = 0.15;
+
+brush.rotation.y = Math.PI/2;
+brush.rotation.z = -Math.PI/2;
+
 brush.add(stick);
 brush.add(tip);
 
