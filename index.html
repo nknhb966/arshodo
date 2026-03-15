@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR空中書道</title>
+<title>AR空中書道a</title>
 
 <style>
 body{
@@ -81,8 +81,8 @@ scene.add(light);
 
 controller=renderer.xr.getController(0);
 
-controller.addEventListener("selectstart",startDraw);
-controller.addEventListener("selectend",endDraw);
+// controller.addEventListener("selectstart",startDraw);
+// controller.addEventListener("selectend",endDraw);
 
 scene.add(controller);
 
@@ -136,19 +136,19 @@ scene.add(instancedMesh);
 
 }
 
-function startDraw(){
+// function startDraw(){
 
-drawing=true;
-hasLast=false;
+// drawing=true;
+// hasLast=false;
 
-}
+// }
 
-function endDraw(){
+// function endDraw(){
 
-drawing=false;
-hasLast=false;
+// drawing=false;
+// hasLast=false;
 
-}
+// }
 
 function getTriggerValue(){
 
@@ -192,11 +192,15 @@ interp.lerpVectors(lastPos,pos,t);
 
 const trigger = getTriggerValue();
 
-let size = THREE.MathUtils.lerp(
+let pressureSize = THREE.MathUtils.lerp(MIN_SIZE,MAX_SIZE,trigger);
+
+let speedSize = THREE.MathUtils.clamp(
+MAX_SIZE - dist*2,
 MIN_SIZE,
-MAX_SIZE,
-trigger
+MAX_SIZE
 );
+
+let size = (pressureSize + speedSize) * 0.5;
 
 stamp(interp,size);
 
