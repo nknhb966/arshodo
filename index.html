@@ -97,9 +97,9 @@ new THREE.CylinderGeometry(0.005,0.005,0.25,6),
 new THREE.MeshStandardMaterial({color:0x884400})
 );
 
-stick.position.x = -0.12;
 stick.rotation.y = 90;
-stick.rotation.z = 90;
+stick.rotation.z = -90;
+stick.position.y = -0.12;
 
 const tip=new THREE.Mesh(
 new THREE.ConeGeometry(0.015,0.05,6),
