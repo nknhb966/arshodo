@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR空中書道a</title>
+<title>AR空中書道</title>
 
 <style>
 body{
@@ -270,14 +270,21 @@ renderer.setAnimationLoop(render);
 
 function render(){
 
-// if(drawing){
-// draw();
-// }
-
 const trigger = getTriggerValue();
 
 if(trigger > 0.05){
-  draw();
+
+if(!drawing){
+hasLast = false; // ←これが重要
+drawing = true;
+}
+
+draw();
+
+}else{
+
+drawing = false;
+
 }
 
 if(inkUpdated){
