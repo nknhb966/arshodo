@@ -100,7 +100,7 @@ const stick = new THREE.Mesh(
 );
 
 const tip = new THREE.Mesh(
-  new THREE.ConeGeometry(0.015,0.05,6),
+  new THREE.ConeGeometry(0.05,0.015,6),
   new THREE.MeshStandardMaterial({color:0x111111})
 );
 
@@ -111,7 +111,7 @@ tip.position.z = 0;
 
 stick.position.z = 0.15;
 
-brush.rotation.y = Math.PI/2;
+// brush.rotation.y = Math.PI/2;
 brush.rotation.z = -Math.PI/2;
 
 brush.add(stick);
