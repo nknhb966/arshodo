@@ -21,6 +21,7 @@ import { ARButton } from "https://unpkg.com/three@0.160.0/examples/jsm/webxr/ARB
 
 let scene,camera,renderer;
 
+let controllerR,controllerL;
 let activeController=null;
 let activeGamepad=null;
 
@@ -84,22 +85,14 @@ requiredFeatures:["local-floor"]
 const light=new THREE.HemisphereLight(0xffffff,0xbbbbff,1);
 scene.add(light);
 
+controllerR = renderer.xr.getController(0);
+controllerL = renderer.xr.getController(1);
+
+scene.add(controllerR);
+scene.add(controllerL);
+
 createBrush();
 createInkSystem();
-
-renderer.xr.addEventListener("sessionstart",()=>{
-
-const session=renderer.xr.getSession();
-
-selectController();
-
-session.addEventListener("inputsourceschange",()=>{
-
-selectController();
-
-});
-
-});
 
 window.addEventListener("resize",resize);
 
@@ -135,51 +128,44 @@ brush.add(tip);
 
 function selectController(){
 
-const session=renderer.xr.getSession();
+const session = renderer.xr.getSession();
 if(!session) return;
 
-let rightSource=null;
-let leftSource=null;
-let anySource=null;
+let right=null;
+let left=null;
+let any=null;
 
 for(const source of session.inputSources){
 
 if(!source.gamepad) continue;
 
-if(source.handedness==="right"){
-
-rightSource=source;
-
-}else if(source.handedness==="left"){
-
-leftSource=source;
-
-}else{
-
-anySource=source;
+if(source.handedness==="right") right=source;
+else if(source.handedness==="left") left=source;
+else any=source;
 
 }
 
-}
-
-const selected=rightSource || leftSource || anySource;
+let selected = right || left || any;
 
 if(!selected) return;
 
-activeGamepad=selected.gamepad;
+activeGamepad = selected.gamepad;
 
 if(activeController){
 activeController.remove(brush);
 }
 
 if(selected.handedness==="right"){
-activeController=renderer.xr.getController(1);
+
+activeController = controllerR;
+
 }else{
-activeController=renderer.xr.getController(0);
+
+activeController = controllerL;
+
 }
 
 activeController.add(brush);
-scene.add(activeController);
 
 }
 
@@ -215,6 +201,8 @@ return activeGamepad.buttons[0].value;
 function draw(){
 
 if(!activeController) return;
+
+activeController.updateMatrixWorld(true);
 
 pos.setFromMatrixPosition(activeController.matrixWorld);
 
@@ -265,9 +253,7 @@ instancedMesh.setMatrixAt(stampIndex,dummy.matrix);
 stampIndex++;
 
 if(stampIndex>=MAX_STAMPS){
-
 stampIndex=0;
-
 }
 
 inkUpdated=true;
@@ -308,15 +294,15 @@ renderer.setAnimationLoop(render);
 
 function render(){
 
+selectController();
+
 const trigger=getTriggerValue();
 
 if(trigger>0.05){
 
 if(!drawing){
-
 hasLast=false;
 drawing=true;
-
 }
 
 draw();
