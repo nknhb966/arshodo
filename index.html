@@ -26,7 +26,7 @@ let drawing=false;
 const STEP_DISTANCE=0.008;
 
 const MIN_SIZE=0.001;
-const MAX_SIZE=0.025;
+const MAX_SIZE=0.035;
 
 const MAX_STAMPS=8000;
 
@@ -78,6 +78,8 @@ requiredFeatures:["local-floor"]
 
 }
 
+renderer.xr.addEventListener("sessionstart",onSessionStart);
+
 const light=new THREE.HemisphereLight(0xffffff,0xbbbbff,1);
 scene.add(light);
 
@@ -88,6 +90,34 @@ createBrush();
 createInkSystem();
 
 window.addEventListener("resize",resize);
+
+}
+
+function onSessionStart(){
+
+const session = renderer.xr.getSession();
+
+session.addEventListener("inputsourceschange",updateGamepad);
+
+updateGamepad();
+
+}
+
+function updateGamepad(){
+
+const session = renderer.xr.getSession();
+if(!session) return;
+
+for(const source of session.inputSources){
+
+if(source.gamepad){
+
+gamepad = source.gamepad;
+break;
+
+}
+
+}
 
 }
 
@@ -137,28 +167,9 @@ MAX_STAMPS
 );
 
 instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+instancedMesh.frustumCulled=false;
 
 scene.add(instancedMesh);
-
-}
-
-function cacheGamepad(){
-
-if(gamepad) return;
-
-const session=renderer.xr.getSession();
-if(!session) return;
-
-for(const source of session.inputSources){
-
-if(source.gamepad){
-
-gamepad=source.gamepad;
-break;
-
-}
-
-}
 
 }
 
@@ -167,9 +178,7 @@ function getTriggerValue(){
 if(!gamepad) return 0;
 
 if(gamepad.buttons.length>0){
-
 return gamepad.buttons[0].value;
-
 }
 
 return 0;
@@ -255,9 +264,7 @@ if(!gamepad) return;
 if(gamepad.buttons.length>4){
 
 if(gamepad.buttons[4].pressed){
-
 clearAll();
-
 }
 
 }
@@ -271,8 +278,6 @@ renderer.setAnimationLoop(render);
 }
 
 function render(){
-
-cacheGamepad();
 
 const trigger=getTriggerValue();
 
@@ -296,7 +301,6 @@ drawing=false;
 if(inkUpdated){
 
 instancedMesh.count=stampIndex;
-
 instancedMesh.instanceMatrix.needsUpdate=true;
 
 inkUpdated=false;
