@@ -1,8 +1,8 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR空中書道</title>
+<title>AR書道</title>
 
 <style>
 body{
@@ -23,8 +23,8 @@ let scene,camera,renderer;
 
 let controllerR,controllerL;
 let activeController=null;
-let activeGamepad=null;
 
+let triggerPressed=false;
 let drawing=false;
 
 const STEP_DISTANCE=0.006;
@@ -91,10 +91,30 @@ controllerL = renderer.xr.getController(1);
 scene.add(controllerR);
 scene.add(controllerL);
 
+controllerR.addEventListener("selectstart",startDraw);
+controllerR.addEventListener("selectend",endDraw);
+
+controllerL.addEventListener("selectstart",startDraw);
+controllerL.addEventListener("selectend",endDraw);
+
 createBrush();
 createInkSystem();
 
 window.addEventListener("resize",resize);
+
+}
+
+function startDraw(e){
+
+triggerPressed=true;
+activeController=e.target;
+
+}
+
+function endDraw(){
+
+triggerPressed=false;
+drawing=false;
 
 }
 
@@ -124,48 +144,7 @@ brush.rotation.x=-Math.PI/3;
 brush.add(stick);
 brush.add(tip);
 
-}
-
-function selectController(){
-
-const session = renderer.xr.getSession();
-if(!session) return;
-
-let right=null;
-let left=null;
-let any=null;
-
-for(const source of session.inputSources){
-
-if(!source.gamepad) continue;
-
-if(source.handedness==="right") right=source;
-else if(source.handedness==="left") left=source;
-else any=source;
-
-}
-
-let selected = right || left || any;
-
-if(!selected) return;
-
-activeGamepad = selected.gamepad;
-
-if(activeController){
-activeController.remove(brush);
-}
-
-if(selected.handedness==="right"){
-
-activeController = controllerR;
-
-}else{
-
-activeController = controllerL;
-
-}
-
-activeController.add(brush);
+controllerR.add(brush);
 
 }
 
@@ -190,20 +169,6 @@ scene.add(instancedMesh);
 
 }
 
-function getTriggerValue(){
-
-if(!activeGamepad) return 0;
-
-for(const b of activeGamepad.buttons){
-
-if(b.pressed) return 1;
-
-}
-
-return 0;
-
-}
-
 function draw(){
 
 if(!activeController) return;
@@ -224,9 +189,7 @@ const t=i/steps;
 
 interp.lerpVectors(lastPos,pos,t);
 
-const trigger=getTriggerValue();
-
-let pressureSize=THREE.MathUtils.lerp(MIN_SIZE,MAX_SIZE,trigger);
+let pressureSize=THREE.MathUtils.lerp(MIN_SIZE,MAX_SIZE,1);
 
 let speedSize=THREE.MathUtils.clamp(
 MAX_SIZE-dist*2,
@@ -276,22 +239,6 @@ instancedMesh.instanceMatrix.needsUpdate=true;
 
 }
 
-function checkClear(){
-
-if(!activeGamepad) return;
-
-if(activeGamepad.buttons.length>4){
-
-if(activeGamepad.buttons[4].pressed){
-
-clearAll();
-
-}
-
-}
-
-}
-
 function animate(){
 
 renderer.setAnimationLoop(render);
@@ -300,11 +247,7 @@ renderer.setAnimationLoop(render);
 
 function render(){
 
-selectController();
-
-const trigger=getTriggerValue();
-
-if(trigger>0.05){
+if(triggerPressed){
 
 if(!drawing){
 hasLast=false;
@@ -312,10 +255,6 @@ drawing=true;
 }
 
 draw();
-
-}else{
-
-drawing=false;
 
 }
 
@@ -328,8 +267,6 @@ instancedMesh.instanceMatrix.needsUpdate=true;
 inkUpdated=false;
 
 }
-
-checkClear();
 
 renderer.render(scene,camera);
 
