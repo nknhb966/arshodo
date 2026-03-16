@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>XR空中書道 Ultimate</title>
+<title>XR空中書道</title>
 
 <style>
 body{
@@ -22,14 +22,12 @@ import { ARButton } from "https://unpkg.com/three@0.160.0/examples/jsm/webxr/ARB
 
 let scene,camera,renderer,controller;
 
-let brushTip;
-
 let drawing=false;
 
 const STEP_DISTANCE=0.01;
 
 const MIN_SIZE=0.002;
-const MAX_SIZE=0.045;
+const MAX_SIZE=0.04;
 
 const MAX_STAMPS=8000;
 
@@ -86,12 +84,15 @@ requiredFeatures:["local-floor"]
 }
 
 const light=new THREE.HemisphereLight(0xffffff,0xbbbbff,1);
+
 scene.add(light);
 
 controller=renderer.xr.getController(0);
+
 scene.add(controller);
 
 createBrush();
+
 createInkSystem();
 
 window.addEventListener("resize",resize);
@@ -116,7 +117,6 @@ stick.rotation.x=Math.PI/2;
 tip.rotation.x=-Math.PI/2;
 
 tip.position.z=0;
-
 stick.position.z=0.15;
 
 brush.rotation.z=Math.PI/2;
@@ -126,8 +126,6 @@ brush.add(stick);
 brush.add(tip);
 
 controller.add(brush);
-
-brushTip=tip;
 
 }
 
@@ -189,15 +187,9 @@ return 0;
 
 }
 
-function getBrushTipWorldPosition(){
-
-brushTip.getWorldPosition(pos);
-
-}
-
 function draw(){
 
-getBrushTipWorldPosition();
+pos.setFromMatrixPosition(controller.matrixWorld);
 
 if(hasLast){
 
@@ -227,7 +219,7 @@ MAX_SIZE
 
 let size=(pressureSize+speedSize)*0.5;
 
-size*=THREE.MathUtils.randFloat(0.9,1.15);
+size*=THREE.MathUtils.randFloat(0.9,1.1);
 
 stamp(interp,size);
 
@@ -250,8 +242,6 @@ dummy.position.copy(position);
 dummy.scale.set(size,size,size);
 
 dummy.lookAt(camera.position);
-
-dummy.rotateZ(Math.random()*Math.PI);
 
 dummy.updateMatrix();
 
@@ -308,6 +298,7 @@ if(trigger>0.05){
 if(!drawing){
 
 hasLast=false;
+
 drawing=true;
 
 }
