@@ -153,7 +153,7 @@ controller.add(brush);
 
 function createInkSystem(){
 
-const geo=new THREE.SphereGeometry(1,10,10);
+const geo=new THREE.SphereGeometry(1,6,6);
 
 const mat=new THREE.MeshStandardMaterial({
 color:0x111111,
@@ -170,6 +170,17 @@ instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 instancedMesh.frustumCulled=false;
 
 scene.add(instancedMesh);
+
+
+// ★ GPUバッファ初期化（重要）
+
+dummy.position.set(0,0,-1000);
+dummy.scale.set(0,0,0);
+dummy.updateMatrix();
+
+instancedMesh.setMatrixAt(0,dummy.matrix);
+instancedMesh.count=1;
+instancedMesh.instanceMatrix.needsUpdate=true;
 
 }
 
