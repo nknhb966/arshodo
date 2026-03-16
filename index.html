@@ -194,7 +194,13 @@ function getTriggerValue(){
 
 if(!activeGamepad) return 0;
 
-return activeGamepad.buttons[0].value;
+for(const b of activeGamepad.buttons){
+
+if(b.pressed) return 1;
+
+}
+
+return 0;
 
 }
 
