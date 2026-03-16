@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道</title>
+<title>AR空中書道</title>
 
 <style>
 body{
@@ -18,15 +18,15 @@ overflow:hidden;
 
 import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
 import { ARButton } from "https://unpkg.com/three@0.160.0/examples/jsm/webxr/ARButton.js";
+import { GLTFExporter } from "https://unpkg.com/three@0.160.0/examples/jsm/exporters/GLTFExporter.js";
 
 let scene,camera,renderer,controller;
 
 let drawing=false;
 
 const STEP_DISTANCE=0.008;
-
 const MIN_SIZE=0.001;
-const MAX_SIZE=0.030;
+const MAX_SIZE=0.035;
 
 const MAX_STAMPS=8000;
 
@@ -153,7 +153,7 @@ controller.add(brush);
 
 function createInkSystem(){
 
-const geo=new THREE.SphereGeometry(1,10,10);
+const geo=new THREE.SphereGeometry(1,6,6);
 
 const mat=new THREE.MeshStandardMaterial({
 color:0x111111,
@@ -171,9 +171,7 @@ instancedMesh.frustumCulled=false;
 
 scene.add(instancedMesh);
 
-
-// ★ GPUバッファ初期化（重要）
-
+// GPU初期化
 dummy.position.set(0,0,-1000);
 dummy.scale.set(0,0,0);
 dummy.updateMatrix();
@@ -203,7 +201,6 @@ pos.setFromMatrixPosition(controller.matrixWorld);
 if(hasLast){
 
 const dist=pos.distanceTo(lastPos);
-
 const steps=Math.max(1,Math.floor(dist/STEP_DISTANCE));
 
 for(let i=1;i<=steps;i++){
@@ -261,14 +258,55 @@ function clearAll(){
 stampIndex=0;
 
 instancedMesh.count=0;
-
 instancedMesh.instanceMatrix.needsUpdate=true;
 
 hasLast=false;
 
 }
 
-function checkClear(){
+function exportInk(){
+
+const group=new THREE.Group();
+const matrix=new THREE.Matrix4();
+
+for(let i=0;i<stampIndex;i++){
+
+instancedMesh.getMatrixAt(i,matrix);
+
+const mesh=new THREE.Mesh(
+instancedMesh.geometry,
+instancedMesh.material.clone()
+);
+
+mesh.applyMatrix4(matrix);
+
+group.add(mesh);
+
+}
+
+const exporter=new GLTFExporter();
+
+exporter.parse(
+group,
+function(result){
+
+const blob=new Blob(
+[result],
+{type:"model/gltf-binary"}
+);
+
+const link=document.createElement("a");
+link.href=URL.createObjectURL(blob);
+link.download="ar_shodo.glb";
+link.click();
+
+},
+{binary:true}
+);
+
+}
+
+function checkButtons(){
 
 if(!gamepad) return;
 
@@ -276,6 +314,14 @@ if(gamepad.buttons.length>4){
 
 if(gamepad.buttons[4].pressed){
 clearAll();
+}
+
+}
+
+if(gamepad.buttons.length>5){
+
+if(gamepad.buttons[5].pressed){
+exportInk();
 }
 
 }
@@ -318,7 +364,7 @@ inkUpdated=false;
 
 }
 
-checkClear();
+checkButtons();
 
 renderer.render(scene,camera);
 
