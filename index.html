@@ -19,13 +19,13 @@ overflow:hidden;
 import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
 import { ARButton } from "https://unpkg.com/three@0.160.0/examples/jsm/webxr/ARButton.js";
 
-let scene,camera,renderer;
-let controller;
+let scene,camera,renderer,controller;
 
 let drawing=false;
 
 const STEP_DISTANCE=0.006;
-const MIN_SIZE=0.002;
+
+const MIN_SIZE=0.001;
 const MAX_SIZE=0.035;
 
 const MAX_STAMPS=15000;
@@ -34,6 +34,8 @@ let instancedMesh;
 let stampIndex=0;
 
 let inkUpdated=false;
+
+let gamepad=null;
 
 const dummy=new THREE.Object3D();
 const pos=new THREE.Vector3();
@@ -66,14 +68,20 @@ renderer.xr.enabled=true;
 
 document.body.appendChild(renderer.domElement);
 
+if(navigator.xr){
+
 document.body.appendChild(
-ARButton.createButton(renderer,{requiredFeatures:["local-floor"]})
+ARButton.createButton(renderer,{
+requiredFeatures:["local-floor"]
+})
 );
+
+}
 
 const light=new THREE.HemisphereLight(0xffffff,0xbbbbff,1);
 scene.add(light);
 
-controller = renderer.xr.getController(0);
+controller=renderer.xr.getController(0);
 scene.add(controller);
 
 createBrush();
@@ -128,29 +136,36 @@ mat,
 MAX_STAMPS
 );
 
-instancedMesh.count=0;
-
 scene.add(instancedMesh);
+
+}
+
+function cacheGamepad(){
+
+if(gamepad) return;
+
+const session = renderer.xr.getSession();
+if(!session) return;
+
+for(const source of session.inputSources){
+
+if(source.gamepad){
+
+gamepad=source.gamepad;
+break;
+
+}
+
+}
 
 }
 
 function getTriggerValue(){
 
-const session = renderer.xr.getSession();
-if(!session) return 0;
+if(!gamepad) return 0;
 
-for(const source of session.inputSources){
-
-if(!source.gamepad) continue;
-
-const buttons = source.gamepad.buttons;
-
-if(buttons.length > 0){
-
-return buttons[0].value;
-
-}
-
+if(gamepad.buttons.length>0){
+return gamepad.buttons[0].value;
 }
 
 return 0;
@@ -159,33 +174,35 @@ return 0;
 
 function draw(){
 
-controller.updateMatrixWorld(true);
-
 pos.setFromMatrixPosition(controller.matrixWorld);
 
 if(hasLast){
 
-const dist=pos.distanceTo(lastPos);
+const dist = pos.distanceTo(lastPos);
 
-const steps=Math.max(1,Math.floor(dist/STEP_DISTANCE));
+const steps = Math.max(1, Math.floor(dist / STEP_DISTANCE));
 
 for(let i=1;i<=steps;i++){
 
-const t=i/steps;
+const t = i/steps;
 
 interp.lerpVectors(lastPos,pos,t);
 
-const trigger=getTriggerValue();
+const trigger = getTriggerValue();
 
-let pressureSize=THREE.MathUtils.lerp(MIN_SIZE,MAX_SIZE,trigger);
+let pressureSize = THREE.MathUtils.lerp(
+MIN_SIZE,
+MAX_SIZE,
+trigger
+);
 
-let speedSize=THREE.MathUtils.clamp(
-MAX_SIZE-dist*2,
+let speedSize = THREE.MathUtils.clamp(
+MAX_SIZE - dist*2,
 MIN_SIZE,
 MAX_SIZE
 );
 
-let size=(pressureSize+speedSize)*0.5;
+let size = (pressureSize + speedSize) * 0.5;
 
 stamp(interp,size);
 
@@ -194,7 +211,7 @@ stamp(interp,size);
 }
 
 lastPos.copy(pos);
-hasLast=true;
+hasLast = true;
 
 }
 
@@ -210,26 +227,62 @@ instancedMesh.setMatrixAt(stampIndex,dummy.matrix);
 stampIndex++;
 
 if(stampIndex>=MAX_STAMPS){
+
 stampIndex=0;
+
 }
 
 inkUpdated=true;
 
 }
 
+function clearAll(){
+
+stampIndex=0;
+
+instancedMesh.count=0;
+
+instancedMesh.instanceMatrix.needsUpdate=true;
+
+hasLast=false;
+
+}
+
+function checkClear(){
+
+if(!gamepad) return;
+
+if(gamepad.buttons.length>4){
+
+if(gamepad.buttons[4].pressed){
+
+clearAll();
+
+}
+
+}
+
+}
+
 function animate(){
+
 renderer.setAnimationLoop(render);
+
 }
 
 function render(){
 
-const trigger=getTriggerValue();
+cacheGamepad();
 
-if(trigger>0.05){
+const trigger = getTriggerValue();
+
+if(trigger > 0.05){
 
 if(!drawing){
+
 hasLast=false;
 drawing=true;
+
 }
 
 draw();
@@ -242,11 +295,15 @@ drawing=false;
 
 if(inkUpdated){
 
-instancedMesh.count=MAX_STAMPS;
+instancedMesh.count=Math.max(instancedMesh.count,stampIndex);
+
 instancedMesh.instanceMatrix.needsUpdate=true;
+
 inkUpdated=false;
 
 }
+
+checkClear();
 
 renderer.render(scene,camera);
 
