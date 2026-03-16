@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>XR空中書道 Stroke版</title>
+<title>XR空中書道 Ultimate</title>
 
 <style>
 body{
@@ -29,17 +29,22 @@ let drawing=false;
 const STEP_DISTANCE=0.01;
 
 const MIN_SIZE=0.002;
-const MAX_SIZE=0.05;
+const MAX_SIZE=0.045;
 
-let points=[];
-let sizes=[];
+const MAX_STAMPS=8000;
 
-let strokeMesh;
+let instancedMesh;
+let stampIndex=0;
+
+let inkUpdated=false;
 
 let gamepad=null;
 
+const dummy=new THREE.Object3D();
+
 const pos=new THREE.Vector3();
 const lastPos=new THREE.Vector3();
+const interp=new THREE.Vector3();
 
 let hasLast=false;
 
@@ -87,6 +92,7 @@ controller=renderer.xr.getController(0);
 scene.add(controller);
 
 createBrush();
+createInkSystem();
 
 window.addEventListener("resize",resize);
 
@@ -110,6 +116,7 @@ stick.rotation.x=Math.PI/2;
 tip.rotation.x=-Math.PI/2;
 
 tip.position.z=0;
+
 stick.position.z=0.15;
 
 brush.rotation.z=Math.PI/2;
@@ -121,6 +128,30 @@ brush.add(tip);
 controller.add(brush);
 
 brushTip=tip;
+
+}
+
+function createInkSystem(){
+
+const geo=new THREE.PlaneGeometry(1,1);
+
+const mat=new THREE.MeshBasicMaterial({
+color:0x111111,
+transparent:true,
+opacity:0.95,
+side:THREE.DoubleSide,
+depthWrite:false
+});
+
+instancedMesh=new THREE.InstancedMesh(
+geo,
+mat,
+MAX_STAMPS
+);
+
+instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+
+scene.add(instancedMesh);
 
 }
 
@@ -158,123 +189,105 @@ return 0;
 
 }
 
-function draw(){
+function getBrushTipWorldPosition(){
 
 brushTip.getWorldPosition(pos);
+
+}
+
+function draw(){
+
+getBrushTipWorldPosition();
 
 if(hasLast){
 
 const dist=pos.distanceTo(lastPos);
 
-if(dist>STEP_DISTANCE){
+const steps=Math.max(1,Math.floor(dist/STEP_DISTANCE));
+
+for(let i=1;i<=steps;i++){
+
+const t=i/steps;
+
+interp.lerpVectors(lastPos,pos,t);
 
 const trigger=getTriggerValue();
 
-let size=THREE.MathUtils.lerp(
+let pressureSize=THREE.MathUtils.lerp(
 MIN_SIZE,
 MAX_SIZE,
 trigger
 );
 
-size*=THREE.MathUtils.randFloat(0.9,1.1);
+let speedSize=THREE.MathUtils.clamp(
+MAX_SIZE-dist*2,
+MIN_SIZE,
+MAX_SIZE
+);
 
-points.push(pos.clone());
-sizes.push(size);
+let size=(pressureSize+speedSize)*0.5;
 
-updateStroke();
+size*=THREE.MathUtils.randFloat(0.9,1.15);
 
-lastPos.copy(pos);
+stamp(interp,size);
 
 }
 
-}else{
+}
 
 lastPos.copy(pos);
+
 hasLast=true;
 
 }
 
-}
+function stamp(position,size){
 
-function updateStroke(){
+if(stampIndex>=MAX_STAMPS) return;
 
-if(points.length<2) return;
+dummy.position.copy(position);
 
-const vertices=[];
-const indices=[];
+dummy.scale.set(size,size,size);
 
-for(let i=0;i<points.length;i++){
+dummy.lookAt(camera.position);
 
-const p=points[i];
+dummy.rotateZ(Math.random()*Math.PI);
 
-const size=sizes[i];
+dummy.updateMatrix();
 
-const dir=new THREE.Vector3();
+instancedMesh.setMatrixAt(stampIndex,dummy.matrix);
 
-if(i<points.length-1){
+stampIndex++;
 
-dir.subVectors(points[i+1],p);
-
-}else{
-
-dir.subVectors(p,points[i-1]);
+inkUpdated=true;
 
 }
 
-const normal=new THREE.Vector3();
+function clearAll(){
 
-normal.crossVectors(dir,camera.position.clone().sub(p));
+stampIndex=0;
 
-normal.normalize();
+instancedMesh.count=0;
 
-normal.multiplyScalar(size);
+instancedMesh.instanceMatrix.needsUpdate=true;
 
-const left=p.clone().add(normal);
-const right=p.clone().sub(normal);
-
-vertices.push(left.x,left.y,left.z);
-vertices.push(right.x,right.y,right.z);
+hasLast=false;
 
 }
 
-for(let i=0;i<points.length-1;i++){
+function checkClear(){
 
-const a=i*2;
-const b=i*2+1;
-const c=i*2+2;
-const d=i*2+3;
+if(!gamepad) return;
 
-indices.push(a,b,c);
-indices.push(b,d,c);
+if(gamepad.buttons.length>4){
 
-}
+if(gamepad.buttons[4].pressed){
 
-const geo=new THREE.BufferGeometry();
-
-geo.setAttribute(
-"position",
-new THREE.Float32BufferAttribute(vertices,3)
-);
-
-geo.setIndex(indices);
-
-geo.computeVertexNormals();
-
-if(strokeMesh){
-
-scene.remove(strokeMesh);
+clearAll();
 
 }
 
-strokeMesh=new THREE.Mesh(
-geo,
-new THREE.MeshBasicMaterial({
-color:0x111111,
-side:THREE.DoubleSide
-})
-);
-
-scene.add(strokeMesh);
+}
 
 }
 
@@ -292,7 +305,12 @@ const trigger=getTriggerValue();
 
 if(trigger>0.05){
 
+if(!drawing){
+
+hasLast=false;
 drawing=true;
+
+}
 
 draw();
 
@@ -300,9 +318,19 @@ draw();
 
 drawing=false;
 
-hasLast=false;
+}
+
+if(inkUpdated){
+
+instancedMesh.count=stampIndex;
+
+instancedMesh.instanceMatrix.needsUpdate=true;
+
+inkUpdated=false;
 
 }
+
+checkClear();
 
 renderer.render(scene,camera);
 
