@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR空中書道</title>
+<title>空中書道 VR</title>
 
 <style>
 body{
@@ -17,7 +17,7 @@ overflow:hidden;
 <script type="module">
 
 import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
-import { ARButton } from "https://unpkg.com/three@0.160.0/examples/jsm/webxr/ARButton.js";
+import { VRButton } from "https://unpkg.com/three@0.160.0/examples/jsm/webxr/VRButton.js";
 import { GLTFExporter } from "https://unpkg.com/three@0.160.0/examples/jsm/exporters/GLTFExporter.js";
 
 let scene,camera,renderer,controller;
@@ -55,28 +55,18 @@ camera=new THREE.PerspectiveCamera(
 70,
 window.innerWidth/window.innerHeight,
 0.01,
-20
+50
 );
 
-renderer=new THREE.WebGLRenderer({
-antialias:true,
-alpha:true
-});
-
+renderer=new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(window.innerWidth,window.innerHeight);
 renderer.xr.enabled=true;
 
 document.body.appendChild(renderer.domElement);
 
-if(navigator.xr){
-
 document.body.appendChild(
-ARButton.createButton(renderer,{
-requiredFeatures:["local-floor"]
-})
+VRButton.createButton(renderer)
 );
-
-}
 
 renderer.xr.addEventListener("sessionstart",onSessionStart);
 
@@ -112,7 +102,7 @@ for(const source of session.inputSources){
 
 if(source.gamepad){
 
-gamepad = source.gamepad;
+gamepad=source.gamepad;
 break;
 
 }
@@ -171,7 +161,6 @@ instancedMesh.frustumCulled=false;
 
 scene.add(instancedMesh);
 
-// GPU初期化
 dummy.position.set(0,0,-1000);
 dummy.scale.set(0,0,0);
 dummy.updateMatrix();
