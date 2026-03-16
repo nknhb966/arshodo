@@ -2,12 +2,13 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR空中書道</title>
+<title>XR空中書道 Stroke版</title>
 
 <style>
 body{
 margin:0;
 overflow:hidden;
+background:#000;
 }
 </style>
 </head>
@@ -21,26 +22,24 @@ import { ARButton } from "https://unpkg.com/three@0.160.0/examples/jsm/webxr/ARB
 
 let scene,camera,renderer,controller;
 
+let brushTip;
+
 let drawing=false;
 
-const STEP_DISTANCE=0.006;
+const STEP_DISTANCE=0.01;
 
-const MIN_SIZE=0.001;
-const MAX_SIZE=0.035;
+const MIN_SIZE=0.002;
+const MAX_SIZE=0.05;
 
-const MAX_STAMPS=15000;
+let points=[];
+let sizes=[];
 
-let instancedMesh;
-let stampIndex=0;
-
-let inkUpdated=false;
+let strokeMesh;
 
 let gamepad=null;
 
-const dummy=new THREE.Object3D();
 const pos=new THREE.Vector3();
 const lastPos=new THREE.Vector3();
-const interp=new THREE.Vector3();
 
 let hasLast=false;
 
@@ -63,7 +62,10 @@ antialias:true,
 alpha:true
 });
 
+renderer.setPixelRatio(window.devicePixelRatio);
+
 renderer.setSize(window.innerWidth,window.innerHeight);
+
 renderer.xr.enabled=true;
 
 document.body.appendChild(renderer.domElement);
@@ -85,7 +87,6 @@ controller=renderer.xr.getController(0);
 scene.add(controller);
 
 createBrush();
-createInkSystem();
 
 window.addEventListener("resize",resize);
 
@@ -93,50 +94,33 @@ window.addEventListener("resize",resize);
 
 function createBrush(){
 
-const brush = new THREE.Group();
+const brush=new THREE.Group();
 
-const stick = new THREE.Mesh(
+const stick=new THREE.Mesh(
 new THREE.CylinderGeometry(0.012,0.012,0.25,6),
 new THREE.MeshStandardMaterial({color:0x884400})
 );
 
-const tip = new THREE.Mesh(
+const tip=new THREE.Mesh(
 new THREE.ConeGeometry(0.015,0.05,6),
 new THREE.MeshStandardMaterial({color:0x111111})
 );
 
-stick.rotation.x = Math.PI/2;
-tip.rotation.x = -Math.PI/2;
+stick.rotation.x=Math.PI/2;
+tip.rotation.x=-Math.PI/2;
 
-tip.position.z = 0;
-stick.position.z = 0.15;
+tip.position.z=0;
+stick.position.z=0.15;
 
-brush.rotation.z = Math.PI/2;
-brush.rotation.x = -Math.PI/3;
+brush.rotation.z=Math.PI/2;
+brush.rotation.x=-Math.PI/3;
 
 brush.add(stick);
 brush.add(tip);
 
 controller.add(brush);
 
-}
-
-function createInkSystem(){
-
-const geo=new THREE.SphereGeometry(1,10,10);
-
-const mat=new THREE.MeshStandardMaterial({
-color:0x111111,
-roughness:1
-});
-
-instancedMesh=new THREE.InstancedMesh(
-geo,
-mat,
-MAX_STAMPS
-);
-
-scene.add(instancedMesh);
+brushTip=tip;
 
 }
 
@@ -144,7 +128,7 @@ function cacheGamepad(){
 
 if(gamepad) return;
 
-const session = renderer.xr.getSession();
+const session=renderer.xr.getSession();
 if(!session) return;
 
 for(const source of session.inputSources){
@@ -165,7 +149,9 @@ function getTriggerValue(){
 if(!gamepad) return 0;
 
 if(gamepad.buttons.length>0){
+
 return gamepad.buttons[0].value;
+
 }
 
 return 0;
@@ -174,93 +160,121 @@ return 0;
 
 function draw(){
 
-pos.setFromMatrixPosition(controller.matrixWorld);
+brushTip.getWorldPosition(pos);
 
 if(hasLast){
 
-const dist = pos.distanceTo(lastPos);
+const dist=pos.distanceTo(lastPos);
 
-const steps = Math.max(1, Math.floor(dist / STEP_DISTANCE));
+if(dist>STEP_DISTANCE){
 
-for(let i=1;i<=steps;i++){
+const trigger=getTriggerValue();
 
-const t = i/steps;
-
-interp.lerpVectors(lastPos,pos,t);
-
-const trigger = getTriggerValue();
-
-let pressureSize = THREE.MathUtils.lerp(
+let size=THREE.MathUtils.lerp(
 MIN_SIZE,
 MAX_SIZE,
 trigger
 );
 
-let speedSize = THREE.MathUtils.clamp(
-MAX_SIZE - dist*2,
-MIN_SIZE,
-MAX_SIZE
-);
+size*=THREE.MathUtils.randFloat(0.9,1.1);
 
-let size = (pressureSize + speedSize) * 0.5;
+points.push(pos.clone());
+sizes.push(size);
 
-stamp(interp,size);
-
-}
-
-}
+updateStroke();
 
 lastPos.copy(pos);
-hasLast = true;
 
 }
 
-function stamp(position,size){
+}else{
 
-dummy.position.copy(position);
-dummy.scale.set(size,size,size);
-
-dummy.updateMatrix();
-
-instancedMesh.setMatrixAt(stampIndex,dummy.matrix);
-
-stampIndex++;
-
-if(stampIndex>=MAX_STAMPS){
-
-stampIndex=0;
-
-}
-
-inkUpdated=true;
-
-}
-
-function clearAll(){
-
-stampIndex=0;
-
-instancedMesh.count=0;
-
-instancedMesh.instanceMatrix.needsUpdate=true;
-
-hasLast=false;
-
-}
-
-function checkClear(){
-
-if(!gamepad) return;
-
-if(gamepad.buttons.length>4){
-
-if(gamepad.buttons[4].pressed){
-
-clearAll();
+lastPos.copy(pos);
+hasLast=true;
 
 }
 
 }
+
+function updateStroke(){
+
+if(points.length<2) return;
+
+const vertices=[];
+const indices=[];
+
+for(let i=0;i<points.length;i++){
+
+const p=points[i];
+
+const size=sizes[i];
+
+const dir=new THREE.Vector3();
+
+if(i<points.length-1){
+
+dir.subVectors(points[i+1],p);
+
+}else{
+
+dir.subVectors(p,points[i-1]);
+
+}
+
+const normal=new THREE.Vector3();
+
+normal.crossVectors(dir,camera.position.clone().sub(p));
+
+normal.normalize();
+
+normal.multiplyScalar(size);
+
+const left=p.clone().add(normal);
+const right=p.clone().sub(normal);
+
+vertices.push(left.x,left.y,left.z);
+vertices.push(right.x,right.y,right.z);
+
+}
+
+for(let i=0;i<points.length-1;i++){
+
+const a=i*2;
+const b=i*2+1;
+const c=i*2+2;
+const d=i*2+3;
+
+indices.push(a,b,c);
+indices.push(b,d,c);
+
+}
+
+const geo=new THREE.BufferGeometry();
+
+geo.setAttribute(
+"position",
+new THREE.Float32BufferAttribute(vertices,3)
+);
+
+geo.setIndex(indices);
+
+geo.computeVertexNormals();
+
+if(strokeMesh){
+
+scene.remove(strokeMesh);
+
+}
+
+strokeMesh=new THREE.Mesh(
+geo,
+new THREE.MeshBasicMaterial({
+color:0x111111,
+side:THREE.DoubleSide
+})
+);
+
+scene.add(strokeMesh);
 
 }
 
@@ -274,16 +288,11 @@ function render(){
 
 cacheGamepad();
 
-const trigger = getTriggerValue();
+const trigger=getTriggerValue();
 
-if(trigger > 0.05){
+if(trigger>0.05){
 
-if(!drawing){
-
-hasLast=false;
 drawing=true;
-
-}
 
 draw();
 
@@ -291,19 +300,9 @@ draw();
 
 drawing=false;
 
-}
-
-if(inkUpdated){
-
-instancedMesh.count=Math.max(instancedMesh.count,stampIndex);
-
-instancedMesh.instanceMatrix.needsUpdate=true;
-
-inkUpdated=false;
+hasLast=false;
 
 }
-
-checkClear();
 
 renderer.render(scene,camera);
 
@@ -312,6 +311,7 @@ renderer.render(scene,camera);
 function resize(){
 
 camera.aspect=window.innerWidth/window.innerHeight;
+
 camera.updateProjectionMatrix();
 
 renderer.setSize(window.innerWidth,window.innerHeight);
