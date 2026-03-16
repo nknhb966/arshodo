@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>XR空中書道 Quest軽量版</title>
+<title>AR空中書道</title>
 
 <style>
 body{
@@ -17,34 +17,35 @@ overflow:hidden;
 <script type="module">
 
 import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
-import { VRButton } from "https://unpkg.com/three@0.160.0/examples/jsm/webxr/VRButton.js";
+import { ARButton } from "https://unpkg.com/three@0.160.0/examples/jsm/webxr/ARButton.js";
 
-let scene,camera,renderer,controller;
+let scene,camera,renderer;
+
+let activeController=null;
+let activeGamepad=null;
 
 let drawing=false;
 
 const STEP_DISTANCE=0.006;
 
-const MIN_SIZE=0.003;
-const MAX_SIZE=0.03;
+const MIN_SIZE=0.001;
+const MAX_SIZE=0.035;
 
-const MAX_STAMPS=7000;
+const MAX_STAMPS=15000;
 
 let instancedMesh;
 let stampIndex=0;
 
-let inkDirty=false;
+let inkUpdated=false;
 
 const dummy=new THREE.Object3D();
-
 const pos=new THREE.Vector3();
 const lastPos=new THREE.Vector3();
 const interp=new THREE.Vector3();
 
-let tip;
-const tipWorld=new THREE.Vector3();
-
 let hasLast=false;
+
+let brush;
 
 init();
 animate();
@@ -52,41 +53,53 @@ animate();
 function init(){
 
 scene=new THREE.Scene();
-scene.background=new THREE.Color(0xffffff);
 
 camera=new THREE.PerspectiveCamera(
 70,
 window.innerWidth/window.innerHeight,
 0.01,
-50
+20
 );
 
 renderer=new THREE.WebGLRenderer({
 antialias:true,
-alpha:false
+alpha:true
 });
 
+renderer.setSize(window.innerWidth,window.innerHeight);
 renderer.xr.enabled=true;
-
-renderer.setPixelRatio(1);
-
-renderer.setSize(
-window.innerWidth,
-window.innerHeight
-);
 
 document.body.appendChild(renderer.domElement);
 
-document.body.appendChild(VRButton.createButton(renderer));
+if(navigator.xr){
 
-const light=new THREE.HemisphereLight(0xffffff,0xcccccc,1);
+document.body.appendChild(
+ARButton.createButton(renderer,{
+requiredFeatures:["local-floor"]
+})
+);
+
+}
+
+const light=new THREE.HemisphereLight(0xffffff,0xbbbbff,1);
 scene.add(light);
 
-controller=renderer.xr.getController(0);
-scene.add(controller);
-
 createBrush();
-createInk();
+createInkSystem();
+
+renderer.xr.addEventListener("sessionstart",()=>{
+
+const session=renderer.xr.getSession();
+
+selectController();
+
+session.addEventListener("inputsourceschange",()=>{
+
+selectController();
+
+});
+
+});
 
 window.addEventListener("resize",resize);
 
@@ -94,14 +107,14 @@ window.addEventListener("resize",resize);
 
 function createBrush(){
 
-const brush=new THREE.Group();
+brush = new THREE.Group();
 
-const stick=new THREE.Mesh(
-new THREE.CylinderGeometry(0.01,0.01,0.25,6),
+const stick = new THREE.Mesh(
+new THREE.CylinderGeometry(0.012,0.012,0.25,6),
 new THREE.MeshStandardMaterial({color:0x884400})
 );
 
-tip=new THREE.Mesh(
+const tip = new THREE.Mesh(
 new THREE.ConeGeometry(0.015,0.05,6),
 new THREE.MeshStandardMaterial({color:0x111111})
 );
@@ -109,26 +122,74 @@ new THREE.MeshStandardMaterial({color:0x111111})
 stick.rotation.x=Math.PI/2;
 tip.rotation.x=-Math.PI/2;
 
+tip.position.z=0;
 stick.position.z=0.15;
-
-brush.add(stick);
-brush.add(tip);
 
 brush.rotation.z=Math.PI/2;
 brush.rotation.x=-Math.PI/3;
 
-controller.add(brush);
+brush.add(stick);
+brush.add(tip);
 
 }
 
-function createInk(){
+function selectController(){
 
-const geo=new THREE.SphereGeometry(1,4,2);
+const session=renderer.xr.getSession();
+if(!session) return;
+
+let rightSource=null;
+let leftSource=null;
+let anySource=null;
+
+for(const source of session.inputSources){
+
+if(!source.gamepad) continue;
+
+if(source.handedness==="right"){
+
+rightSource=source;
+
+}else if(source.handedness==="left"){
+
+leftSource=source;
+
+}else{
+
+anySource=source;
+
+}
+
+}
+
+const selected=rightSource || leftSource || anySource;
+
+if(!selected) return;
+
+activeGamepad=selected.gamepad;
+
+if(activeController){
+activeController.remove(brush);
+}
+
+if(selected.handedness==="right"){
+activeController=renderer.xr.getController(1);
+}else{
+activeController=renderer.xr.getController(0);
+}
+
+activeController.add(brush);
+scene.add(activeController);
+
+}
+
+function createInkSystem(){
+
+const geo=new THREE.SphereGeometry(1,10,10);
 
 const mat=new THREE.MeshStandardMaterial({
 color:0x111111,
-roughness:1,
-transparent:false
+roughness:1
 });
 
 instancedMesh=new THREE.InstancedMesh(
@@ -137,45 +198,25 @@ mat,
 MAX_STAMPS
 );
 
+instancedMesh.count=0;
+
 scene.add(instancedMesh);
 
 }
 
-function getTrigger(){
+function getTriggerValue(){
 
-const session=renderer.xr.getSession();
-if(!session) return 0;
+if(!activeGamepad) return 0;
 
-for(const source of session.inputSources){
-
-if(source.gamepad){
-
-const gp=source.gamepad;
-
-if(gp.buttons.length>0){
-
-if(gp.buttons[0].pressed) return 1;
-
-}
-
-}
-
-}
-
-return 0;
-
-}
-
-function getTipPosition(){
-
-tip.getWorldPosition(tipWorld);
-return tipWorld;
+return activeGamepad.buttons[0].value;
 
 }
 
 function draw(){
 
-pos.copy(getTipPosition());
+if(!activeController) return;
+
+pos.setFromMatrixPosition(activeController.matrixWorld);
 
 if(hasLast){
 
@@ -189,13 +230,9 @@ const t=i/steps;
 
 interp.lerpVectors(lastPos,pos,t);
 
-const trigger=getTrigger();
+const trigger=getTriggerValue();
 
-let pressureSize=THREE.MathUtils.lerp(
-MIN_SIZE,
-MAX_SIZE,
-trigger
-);
+let pressureSize=THREE.MathUtils.lerp(MIN_SIZE,MAX_SIZE,trigger);
 
 let speedSize=THREE.MathUtils.clamp(
 MAX_SIZE-dist*2,
@@ -233,7 +270,33 @@ stampIndex=0;
 
 }
 
-inkDirty=true;
+inkUpdated=true;
+
+}
+
+function clearAll(){
+
+stampIndex=0;
+
+instancedMesh.count=0;
+
+instancedMesh.instanceMatrix.needsUpdate=true;
+
+}
+
+function checkClear(){
+
+if(!activeGamepad) return;
+
+if(activeGamepad.buttons.length>4){
+
+if(activeGamepad.buttons[4].pressed){
+
+clearAll();
+
+}
+
+}
 
 }
 
@@ -245,16 +308,14 @@ renderer.setAnimationLoop(render);
 
 function render(){
 
-controller.updateMatrixWorld(true);
+const trigger=getTriggerValue();
 
-const trigger=getTrigger();
-
-if(trigger>0){
+if(trigger>0.05){
 
 if(!drawing){
 
-drawing=true;
 hasLast=false;
+drawing=true;
 
 }
 
@@ -266,15 +327,17 @@ drawing=false;
 
 }
 
-if(inkDirty){
+if(inkUpdated){
 
-instancedMesh.count=Math.min(stampIndex,MAX_STAMPS);
+instancedMesh.count=MAX_STAMPS;
 
 instancedMesh.instanceMatrix.needsUpdate=true;
 
-inkDirty=false;
+inkUpdated=false;
 
 }
+
+checkClear();
 
 renderer.render(scene,camera);
 
@@ -283,13 +346,9 @@ renderer.render(scene,camera);
 function resize(){
 
 camera.aspect=window.innerWidth/window.innerHeight;
-
 camera.updateProjectionMatrix();
 
-renderer.setSize(
-window.innerWidth,
-window.innerHeight
-);
+renderer.setSize(window.innerWidth,window.innerHeight);
 
 }
 
