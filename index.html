@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道s</title>
+<title>AR書道</title>
 <style>
 body{margin:0;overflow:hidden;}
 </style>
@@ -170,14 +170,16 @@ colorWheel.add(colorPointer);
 }
 
 function createInkSystem(){
+
     const geo = new THREE.SphereGeometry(1,6,6);
 
-    // ★ MeshBasicMaterial に変更
+    // ★ ここを MeshBasicMaterial に変更
     const mat = new THREE.MeshBasicMaterial({
         vertexColors: true
     });
 
     instancedMesh = new THREE.InstancedMesh(geo, mat, MAX_STAMPS);
+
     instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     instancedMesh.frustumCulled = false;
 
@@ -185,7 +187,8 @@ function createInkSystem(){
 
     scene.add(instancedMesh);
 
-    instancedMesh.count = 0; // 初期は0
+    // 初期状態はインスタンスなし
+    instancedMesh.count = 0;
 }
 
 // ★ 毎フレーム右手gamepad取得
@@ -223,7 +226,7 @@ function updateColor(){
 
     const len=Math.hypot(x,y);
 
-    // ホイール表示/非表示
+    // 非表示条件
     if(len<0.15 || getTrigger()>0.05){
         colorWheel.visible=false;
     }else{
@@ -244,7 +247,7 @@ function updateColor(){
         );
         colorPointer.material.color.copy(brushColor);
 
-        // 筆先も更新
+        // ★ ここで筆先の色も更新
         if(tipMesh){
             tipMesh.material.color.copy(brushColor);
         }
@@ -287,7 +290,9 @@ hasLast=true;
 
 }
 
+// リングバッファ
 function stamp(position,size){
+
     const index = stampIndex % MAX_STAMPS;
 
     dummy.position.copy(position);
@@ -302,7 +307,7 @@ function stamp(position,size){
 
     stampIndex++;
 
-    instancedMesh.count = Math.min(stampIndex, MAX_STAMPS);
+    instancedMesh.count = Math.min(stampIndex,MAX_STAMPS);
     instancedMesh.instanceMatrix.needsUpdate = true;
     instancedMesh.instanceColor.needsUpdate = true;
 }
