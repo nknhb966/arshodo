@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>InstancedMesh 球体生成</title>
+<title>InstancedMesh 色追従</title>
 <style>
 body{margin:0;overflow:hidden;}
 canvas{display:block;}
@@ -87,6 +87,7 @@ function getTrigger(){
     return gamepad.buttons[0]?.value || 0;
 }
 
+// スティックで色変更
 function updateColor(){
     if(!gamepad) return;
 
@@ -104,10 +105,19 @@ function updateColor(){
         const hue = angle/(Math.PI*2);
         brushColor.setHSL(hue,1,0.5);
     }
+
+    // 既存のインスタンスも追従させる
+    for(let i=0;i<Math.min(spawnIndex, MAX_SPHERES); i++){
+        colorArray[i*3+0] = brushColor.r;
+        colorArray[i*3+1] = brushColor.g;
+        colorArray[i*3+2] = brushColor.b;
+    }
+    instancedMesh.instanceColor.needsUpdate = true;
 }
 
 let triggerPressed=false;
 
+// 新しい球体生成
 function spawnSphere(){
     if(!rightController) return;
     const pos = new THREE.Vector3();
@@ -116,6 +126,7 @@ function spawnSphere(){
     dummy.position.copy(pos);
     dummy.scale.set(0.05,0.05,0.05);
     dummy.updateMatrix();
+
     const index = spawnIndex % MAX_SPHERES;
     instancedMesh.setMatrixAt(index, dummy.matrix);
 
@@ -155,7 +166,6 @@ function resize(){
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
 }
-
 </script>
 </body>
 </html>
