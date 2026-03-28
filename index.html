@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>右手スティックで色変更テスト</title>
+<title>VR 球体生成テスト</title>
 <style>
 body{margin:0;overflow:hidden;}
 canvas{display:block;}
@@ -17,9 +17,11 @@ let scene, camera, renderer;
 let controller0, controller1, rightController = null;
 let gamepad = null;
 
-// 球体
-let sphere;
 let brushColor = new THREE.Color(0xff0000);
+const spheres = []; // 生成した球体を保持
+
+// 初期球体
+let initialSphere;
 
 init();
 animate();
@@ -36,15 +38,16 @@ function init(){
     document.body.appendChild(renderer.domElement);
     document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures:["local-floor"] }));
 
-    // 球体作成
-    const geo = new THREE.SphereGeometry(0.1, 32, 32);
-    const mat = new THREE.MeshStandardMaterial({ color: brushColor });
-    sphere = new THREE.Mesh(geo, mat);
-    sphere.position.set(0,0,-0.5);
-    scene.add(sphere);
-
     const light = new THREE.HemisphereLight(0xffffff,0xbbbbff,1);
     scene.add(light);
+
+    // 初期球体
+    const geo = new THREE.SphereGeometry(0.1, 32, 32);
+    const mat = new THREE.MeshStandardMaterial({ color: brushColor });
+    initialSphere = new THREE.Mesh(geo, mat);
+    initialSphere.position.set(0,0,-0.5);
+    scene.add(initialSphere);
+    spheres.push(initialSphere);
 
     // コントローラー
     controller0 = renderer.xr.getController(0);
@@ -76,6 +79,11 @@ function updateGamepad(){
     }
 }
 
+function getTrigger(){
+    if(!gamepad) return 0;
+    return gamepad.buttons[0]?.value || 0;
+}
+
 function updateColor(){
     if(!gamepad) return;
 
@@ -94,9 +102,27 @@ function updateColor(){
         if(angle < 0) angle += Math.PI*2;
         const hue = angle/(Math.PI*2);
         brushColor.setHSL(hue,1,0.5);
-        sphere.material.color.copy(brushColor);
+
+        // 既存の全球体の色を変えない
+        // 初期球体の色を更新（オプション）
+        initialSphere.material.color.copy(brushColor);
     }
 }
+
+function spawnSphere(){
+    if(!rightController) return;
+    const pos = new THREE.Vector3();
+    pos.setFromMatrixPosition(rightController.matrixWorld);
+
+    const geo = new THREE.SphereGeometry(0.05, 32, 32);
+    const mat = new THREE.MeshStandardMaterial({ color: brushColor.clone() });
+    const sphere = new THREE.Mesh(geo, mat);
+    sphere.position.copy(pos);
+    scene.add(sphere);
+    spheres.push(sphere);
+}
+
+let triggerPressed = false;
 
 function animate(){
     renderer.setAnimationLoop(render);
@@ -105,7 +131,18 @@ function animate(){
 function render(){
     updateGamepad();
     updateColor();
-    renderer.render(scene,camera);
+
+    const t = getTrigger();
+    if(t>0.05){
+        if(!triggerPressed){
+            spawnSphere();
+            triggerPressed = true;
+        }
+    } else {
+        triggerPressed = false;
+    }
+
+    renderer.render(scene, camera);
 }
 
 function resize(){
