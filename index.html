@@ -1,9 +1,8 @@
-
 <!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道</title>
+<title>AR書道a</title>
 
 <style>
 body{
@@ -20,7 +19,11 @@ overflow:hidden;
 import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
 import { ARButton } from "https://unpkg.com/three@0.160.0/examples/jsm/webxr/ARButton.js";
 
-let scene,camera,renderer,controller;
+let scene,camera,renderer;
+
+// ★ 右手専用
+let rightController=null;
+let rightGamepad=null;
 
 let drawing=false;
 
@@ -35,8 +38,6 @@ let instancedMesh;
 let stampIndex=0;
 
 let inkUpdated=false;
-
-let gamepad=null;
 
 const dummy=new THREE.Object3D();
 const pos=new THREE.Vector3();
@@ -84,10 +85,6 @@ renderer.xr.addEventListener("sessionstart",onSessionStart);
 const light=new THREE.HemisphereLight(0xffffff,0xbbbbff,1);
 scene.add(light);
 
-controller=renderer.xr.getController(0);
-scene.add(controller);
-
-createBrush();
 createInkSystem();
 
 window.addEventListener("resize",resize);
@@ -98,25 +95,45 @@ function onSessionStart(){
 
 const session = renderer.xr.getSession();
 
-session.addEventListener("inputsourceschange",updateGamepad);
+session.addEventListener("inputsourceschange",updateInputSources);
 
-updateGamepad();
+updateInputSources();
 
 }
 
-function updateGamepad(){
+// ★ 右手だけ取得して紐付け
+function updateInputSources(){
 
 const session = renderer.xr.getSession();
 if(!session) return;
 
-gamepad = null;
+rightController=null;
+rightGamepad=null;
 
-for(const source of session.inputSources){
+const sources = session.inputSources;
 
-// ★ 右手だけを許可
-if(source.handedness === "right" && source.gamepad){
+for(let i=0;i<sources.length;i++){
 
-gamepad = source.gamepad;
+const source = sources[i];
+
+if(source.handedness==="right"){
+
+// controller取得（index対応）
+rightController = renderer.xr.getController(i);
+
+// gamepad取得
+if(source.gamepad){
+rightGamepad = source.gamepad;
+}
+
+// 初回のみ追加
+if(rightController && !rightController.parent){
+
+scene.add(rightController);
+createBrush(rightController);
+
+}
+
 break;
 
 }
@@ -125,7 +142,7 @@ break;
 
 }
 
-function createBrush(){
+function createBrush(ctrl){
 
 const brush=new THREE.Group();
 
@@ -151,7 +168,7 @@ brush.rotation.x=-Math.PI/3;
 brush.add(stick);
 brush.add(tip);
 
-controller.add(brush);
+ctrl.add(brush);
 
 }
 
@@ -175,9 +192,7 @@ instancedMesh.frustumCulled=false;
 
 scene.add(instancedMesh);
 
-
-// ★ GPUバッファ初期化（重要）
-
+// GPU初期化
 dummy.position.set(0,0,-1000);
 dummy.scale.set(0,0,0);
 dummy.updateMatrix();
@@ -190,10 +205,10 @@ instancedMesh.instanceMatrix.needsUpdate=true;
 
 function getTriggerValue(){
 
-if(!gamepad) return 0;
+if(!rightGamepad) return 0;
 
-if(gamepad.buttons.length>0){
-return gamepad.buttons[0].value;
+if(rightGamepad.buttons.length>0){
+return rightGamepad.buttons[0].value;
 }
 
 return 0;
@@ -202,7 +217,9 @@ return 0;
 
 function draw(){
 
-pos.setFromMatrixPosition(controller.matrixWorld);
+if(!rightController) return;
+
+pos.setFromMatrixPosition(rightController.matrixWorld);
 
 if(hasLast){
 
@@ -274,11 +291,11 @@ hasLast=false;
 
 function checkClear(){
 
-if(!gamepad) return;
+if(!rightGamepad) return;
 
-if(gamepad.buttons.length>4){
+if(rightGamepad.buttons.length>4){
 
-if(gamepad.buttons[4].pressed){
+if(rightGamepad.buttons[4].pressed){
 clearAll();
 }
 
