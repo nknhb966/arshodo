@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>InstancedMesh 色追従</title>
+<title>色追従（BasicMaterial）</title>
 <style>
 body{margin:0;overflow:hidden;}
 canvas{display:block;}
@@ -17,7 +17,7 @@ let scene, camera, renderer;
 let controller0, controller1, rightController=null;
 let gamepad=null;
 
-const MAX_SPHERES = 1000;
+const MAX_SPHERES = 500;
 let instancedMesh;
 let colorArray;
 let dummy = new THREE.Object3D();
@@ -39,12 +39,9 @@ function init(){
     document.body.appendChild(renderer.domElement);
     document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures:["local-floor"] }));
 
-    const light = new THREE.HemisphereLight(0xffffff,0xbbbbff,1);
-    scene.add(light);
-
-    // InstancedMesh 作成
+    // InstancedMesh 作成（MeshBasicMaterialで色が常に見える）
     const geo = new THREE.SphereGeometry(0.05, 16,16);
-    const mat = new THREE.MeshStandardMaterial({vertexColors:true});
+    const mat = new THREE.MeshBasicMaterial({vertexColors:true});
     instancedMesh = new THREE.InstancedMesh(geo, mat, MAX_SPHERES);
     instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 
@@ -106,7 +103,7 @@ function updateColor(){
         brushColor.setHSL(hue,1,0.5);
     }
 
-    // 既存のインスタンスも追従させる
+    // 既存のインスタンスも追従
     for(let i=0;i<Math.min(spawnIndex, MAX_SPHERES); i++){
         colorArray[i*3+0] = brushColor.r;
         colorArray[i*3+1] = brushColor.g;
