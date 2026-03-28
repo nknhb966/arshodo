@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道ink</title>
+<title>AR書道</title>
 <style>
 body{margin:0;overflow:hidden;}
 </style>
@@ -41,11 +41,8 @@ let lastSize=0.01;
 let fadeOutCount=0;
 const FADE_STEPS=8;
 
-// ★ 色ホイール
 let colorWheel;
 let colorPointer;
-
-// ★ 筆先
 let tipMesh;
 
 init();
@@ -100,7 +97,6 @@ new THREE.CylinderGeometry(0.01,0.01,0.25,6),
 new THREE.MeshStandardMaterial({color:0x884400})
 );
 
-// ★ グローバル化した筆先
 tipMesh=new THREE.Mesh(
 new THREE.ConeGeometry(0.015,0.05,6),
 new THREE.MeshStandardMaterial({color:0x111111})
@@ -108,7 +104,6 @@ new THREE.MeshStandardMaterial({color:0x111111})
 
 stick.rotation.x=Math.PI/2;
 tipMesh.rotation.x=-Math.PI/2;
-
 stick.position.z=0.15;
 
 brush.add(stick);
@@ -116,11 +111,9 @@ brush.add(tipMesh);
 
 brush.rotation.set(-Math.PI/3,0,Math.PI/2);
 
-// 色ホイール
 createColorWheel();
 colorWheel.position.z=-0.08;
 colorWheel.rotation.x=Math.PI;
-
 brush.add(colorWheel);
 
 rightController.add(brush);
@@ -137,16 +130,11 @@ const geometry=new THREE.RingGeometry(radius*0.8,radius,segments);
 const colors=[];
 
 for(let i=0;i<=segments;i++){
-
 const t=i/segments;
-const hue=t;
-
 const c=new THREE.Color();
-c.setHSL(hue,1,0.5);
-
+c.setHSL(t,1,0.5);
 colors.push(c.r,c.g,c.b);
 colors.push(c.r,c.g,c.b);
-
 }
 
 geometry.setAttribute("color",new THREE.Float32BufferAttribute(colors,3));
@@ -160,7 +148,6 @@ opacity:0.7
 
 colorWheel=new THREE.Mesh(geometry,material);
 
-// ポインタ
 colorPointer=new THREE.Mesh(
 new THREE.SphereGeometry(0.008,8,8),
 new THREE.MeshBasicMaterial({color:0xffffff})
@@ -174,9 +161,9 @@ function createInkSystem(){
 
 const geo=new THREE.SphereGeometry(1,6,6);
 
-const mat=new THREE.MeshStandardMaterial({
-vertexColors:true,
-roughness:1
+// ★ ここが超重要（BasicMaterial）
+const mat=new THREE.MeshBasicMaterial({
+vertexColors:true
 });
 
 instancedMesh=new THREE.InstancedMesh(geo,mat,MAX_STAMPS);
@@ -184,9 +171,9 @@ instancedMesh=new THREE.InstancedMesh(geo,mat,MAX_STAMPS);
 instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 instancedMesh.frustumCulled=false;
 
-// ★ これを追加（超重要）
-instancedMesh.instanceColor = new THREE.InstancedBufferAttribute(
-new Float32Array(MAX_STAMPS * 3),
+// ★ instanceColor を明示的に作る
+instancedMesh.instanceColor=new THREE.InstancedBufferAttribute(
+new Float32Array(MAX_STAMPS*3),
 3
 );
 
@@ -194,7 +181,6 @@ scene.add(instancedMesh);
 
 }
 
-// gamepad取得
 function updateGamepad(){
 
 const session=renderer.xr.getSession();
@@ -210,11 +196,9 @@ return;
 }
 
 function getTrigger(){
-if(!gamepad) return 0;
-return gamepad.buttons[0]?.value||0;
+return gamepad?.buttons[0]?.value||0;
 }
 
-// 色更新
 function updateColor(){
 
 if(!gamepad) return;
@@ -245,24 +229,15 @@ if(angle<0) angle+=Math.PI*2;
 const hue=(angle+Math.PI)/(Math.PI*2);
 brushColor.setHSL(hue,1,0.5);
 
-// ポインタ
 const r=0.055;
-colorPointer.position.set(
-Math.cos(angle)*r,
-Math.sin(angle)*r,
-0
-);
-
+colorPointer.position.set(Math.cos(angle)*r,Math.sin(angle)*r,0);
 colorPointer.material.color.copy(brushColor);
 
-// ★ 筆先の色更新
-if(tipMesh){
+// 筆先
 tipMesh.material.color.copy(brushColor);
-}
 
 }
 
-// 描画
 function draw(){
 
 pos.setFromMatrixPosition(rightController.matrixWorld);
@@ -307,8 +282,8 @@ dummy.updateMatrix();
 
 instancedMesh.setMatrixAt(index,dummy.matrix);
 
-// ★ 正しい色設定
-instancedMesh.setColorAt(index, brushColor);
+// ★ 色を確実に反映
+instancedMesh.setColorAt(index, brushColor.clone());
 
 stampIndex++;
 
@@ -386,7 +361,9 @@ checkButtons();
 
 instancedMesh.count=Math.min(stampIndex,MAX_STAMPS);
 instancedMesh.instanceMatrix.needsUpdate=true;
-instancedMesh.instanceColor && (instancedMesh.instanceColor.needsUpdate=true);
+
+// ★ これ絶対必要
+instancedMesh.instanceColor.needsUpdate=true;
 
 renderer.render(scene,camera);
 
