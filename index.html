@@ -83,24 +83,6 @@ renderer.xr.addEventListener("sessionstart",onSessionStart);
 const light=new THREE.HemisphereLight(0xffffff,0xbbbbff,1);
 scene.add(light);
 
-controller = renderer.xr.getController(0);
-
-// ★ 右手のみ使用
-renderer.xr.addEventListener("sessionstart", () => {
-  const session = renderer.xr.getSession();
-
-  for (const source of session.inputSources) {
-    if (source.handedness === "right") {
-      controller = renderer.xr.getController(
-        session.inputSources.indexOf(source)
-      );
-      scene.add(controller);
-      break;
-    }
-  }
-});
-scene.add(controller);
-
 createBrush();
 createInkSystem();
 
@@ -123,14 +105,25 @@ function updateGamepad(){
 const session = renderer.xr.getSession();
 if(!session) return;
 
-gamepad = null; // ← 毎回リセット
+gamepad = null;
 
 for(const source of session.inputSources){
 
-// ★ 右手のみ許可
-if(source.handedness === "right" && source.gamepad){
+if(source.handedness === "right"){
 
+// ★ gamepad
+if(source.gamepad){
 gamepad = source.gamepad;
+}
+
+if(source.targetRaySpace){
+controller = renderer.xr.getController(
+  session.inputSources.indexOf(source)
+);
+
+scene.add(controller);
+}
+
 break;
 
 }
