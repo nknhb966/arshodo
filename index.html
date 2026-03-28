@@ -2,79 +2,47 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>InstancedMesh 色テスト</title>
+<title>Mesh テスト</title>
 <style>
 body { margin:0; overflow:hidden; }
+canvas { display:block; }
 </style>
 </head>
 <body>
 <script type="module">
 import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
 
-let scene, camera, renderer;
-let instancedMesh;
-const MAX_STAMPS = 100;
-const colorArray = new Float32Array(MAX_STAMPS * 3);
+let scene, camera, renderer, mesh;
 
 init();
 animate();
 
 function init() {
     scene = new THREE.Scene();
+
     camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.01, 10);
-    camera.position.z = 2;
+    camera.position.z = 1;
 
     renderer = new THREE.WebGLRenderer({antialias:true});
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
-    const light = new THREE.HemisphereLight(0xffffff,0xbbbbff,1);
-    scene.add(light);
+    // Mesh 1個で表示確認
+    const geo = new THREE.SphereGeometry(0.1, 32, 32);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xff0000 }); // 赤
+    mesh = new THREE.Mesh(geo, mat);
+    scene.add(mesh);
 
-    // -------------------- InstancedMesh 作成 --------------------
-    const geo = new THREE.SphereGeometry(0.05, 6, 6);
-
-    // ★ ここで vertexColors を true にする
-    const mat = new THREE.MeshBasicMaterial({vertexColors: true});
-
-    instancedMesh = new THREE.InstancedMesh(geo, mat, MAX_STAMPS);
-    instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    instancedMesh.frustumCulled = false;
-
-    scene.add(instancedMesh);
-
-    const dummy = new THREE.Object3D();
-
-    // 配置と色を設定
-    for(let i=0;i<MAX_STAMPS;i++){
-        dummy.position.set((Math.random()-0.5)*2, (Math.random()-0.5)*2, (Math.random()-0.5)*2);
-        dummy.updateMatrix();
-        instancedMesh.setMatrixAt(i, dummy.matrix);
-
-        // ★ 赤色に固定
-        colorArray[i*3+0] = 1; // R
-        colorArray[i*3+1] = 0; // G
-        colorArray[i*3+2] = 0; // B
-    }
-
-    instancedMesh.instanceColor = new THREE.InstancedBufferAttribute(colorArray, 3);
-    instancedMesh.instanceColor.needsUpdate = true;
-
-    window.addEventListener("resize", onWindowResize);
+    window.addEventListener("resize", () => {
+        camera.aspect = window.innerWidth/window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
 }
 
-function onWindowResize(){
-    camera.aspect = window.innerWidth/window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-}
-
-function animate(){
+function animate() {
     requestAnimationFrame(animate);
-
-    instancedMesh.rotation.y += 0.01;
-
-    renderer.render(scene,camera);
+    renderer.render(scene, camera);
 }
 </script>
 </body>
