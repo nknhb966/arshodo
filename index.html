@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>VR InstancedMesh 色描画テスト</title>
+<title>右手スティックで色変更テスト</title>
 <style>
 body{margin:0;overflow:hidden;}
 canvas{display:block;}
@@ -17,12 +17,8 @@ let scene, camera, renderer;
 let controller0, controller1, rightController = null;
 let gamepad = null;
 
-const MAX_STAMPS = 500;
-const colorArray = new Float32Array(MAX_STAMPS*3);
-let stampIndex = 0;
-
-let instancedMesh;
-const dummy = new THREE.Object3D();
+// 球体
+let sphere;
 let brushColor = new THREE.Color(0xff0000);
 
 init();
@@ -40,19 +36,22 @@ function init(){
     document.body.appendChild(renderer.domElement);
     document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures:["local-floor"] }));
 
+    // 球体作成
+    const geo = new THREE.SphereGeometry(0.1, 32, 32);
+    const mat = new THREE.MeshStandardMaterial({ color: brushColor });
+    sphere = new THREE.Mesh(geo, mat);
+    sphere.position.set(0,0,-0.5);
+    scene.add(sphere);
+
+    const light = new THREE.HemisphereLight(0xffffff,0xbbbbff,1);
+    scene.add(light);
+
+    // コントローラー
     controller0 = renderer.xr.getController(0);
     controller1 = renderer.xr.getController(1);
     scene.add(controller0, controller1);
     controller0.addEventListener("connected", onConnected);
     controller1.addEventListener("connected", onConnected);
-
-    // InstancedMesh
-    const geo = new THREE.SphereGeometry(0.02, 16, 16);
-    const mat = new THREE.MeshBasicMaterial({ vertexColors: true });
-    instancedMesh = new THREE.InstancedMesh(geo, mat, MAX_STAMPS);
-    instancedMesh.frustumCulled = false;
-    instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    scene.add(instancedMesh);
 
     window.addEventListener("resize", resize);
 }
@@ -70,22 +69,11 @@ function updateGamepad(){
 
     gamepad = null;
     for(const source of session.inputSources){
-        if(source.handedness === "right" && source.gamepad){
+        if(source.handedness==="right" && source.gamepad){
             gamepad = source.gamepad;
-            // マトリックス取得用に rightController 更新
-            rightController = (source === session.inputSources[0]) ? controller0 : controller1;
             break;
         }
     }
-    if(gamepad){
-        // デバッグ用：トリガーや軸を確認
-        // console.log("Gamepad:", gamepad.buttons.map(b=>b.value), "axes:", gamepad.axes);
-    }
-}
-
-function getTrigger(){
-    if(!gamepad) return 0;
-    return gamepad.buttons[0]?.value || 0;
 }
 
 function updateColor(){
@@ -93,38 +81,21 @@ function updateColor(){
 
     let x=0, y=0;
     if(gamepad.axes.length>=4){
-        x=gamepad.axes[2];
-        y=gamepad.axes[3];
-    }else if(gamepad.axes.length>=2){
-        x=gamepad.axes[0];
-        y=gamepad.axes[1];
+        x = gamepad.axes[2];
+        y = gamepad.axes[3];
+    } else if(gamepad.axes.length>=2){
+        x = gamepad.axes[0];
+        y = gamepad.axes[1];
     }
 
-    const len = Math.hypot(x, y);
+    const len = Math.hypot(x,y);
     if(len>0.2){
-        let angle = Math.atan2(y, x);
-        if(angle<0) angle += Math.PI*2;
-        brushColor.setHSL(angle/(Math.PI*2),1,0.5);
+        let angle = Math.atan2(y,x);
+        if(angle < 0) angle += Math.PI*2;
+        const hue = angle/(Math.PI*2);
+        brushColor.setHSL(hue,1,0.5);
+        sphere.material.color.copy(brushColor);
     }
-}
-
-function draw(){
-    if(!rightController) return;
-    const pos = new THREE.Vector3();
-    pos.setFromMatrixPosition(rightController.matrixWorld);
-
-    const idx = stampIndex % MAX_STAMPS;
-    dummy.position.copy(pos);
-    dummy.updateMatrix();
-    instancedMesh.setMatrixAt(idx, dummy.matrix);
-
-    colorArray[idx*3+0] = brushColor.r;
-    colorArray[idx*3+1] = brushColor.g;
-    colorArray[idx*3+2] = brushColor.b;
-
-    stampIndex++;
-    instancedMesh.instanceMatrix.needsUpdate = true;
-    instancedMesh.instanceColor.needsUpdate = true;
 }
 
 function animate(){
@@ -134,12 +105,7 @@ function animate(){
 function render(){
     updateGamepad();
     updateColor();
-
-    if(getTrigger() > 0.05){
-        draw();
-    }
-
-    renderer.render(scene, camera);
+    renderer.render(scene,camera);
 }
 
 function resize(){
