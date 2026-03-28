@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道a</title>
+<title>AR書道</title>
 
 <style>
 body{
@@ -83,24 +83,9 @@ renderer.xr.addEventListener("sessionstart",onSessionStart);
 const light=new THREE.HemisphereLight(0xffffff,0xbbbbff,1);
 scene.add(light);
 
-controller = renderer.xr.getController(0);
-
-renderer.xr.addEventListener("sessionstart", () => {
-  const session = renderer.xr.getSession();
-
-  for (const source of session.inputSources) {
-    if (source.handedness === "right") {
-      controller = renderer.xr.getController(0);
-      scene.add(controller);
-      break;
-    }
-  }
-});
-
+// ★ controllerは仮で作る（あとで右手に差し替え）
+controller=new THREE.Group();
 scene.add(controller);
-
-const controllerL = renderer.xr.getController(1);
-scene.remove(controllerL);
 
 createBrush();
 createInkSystem();
@@ -113,32 +98,55 @@ function onSessionStart(){
 
 const session = renderer.xr.getSession();
 
-session.addEventListener("inputsourceschange",updateGamepad);
+session.addEventListener("inputsourceschange",updateInputSource);
 
-updateGamepad();
+updateInputSource();
 
 }
 
-function updateGamepad(){
+function updateInputSource(){
 
 const session = renderer.xr.getSession();
 if(!session) return;
 
-gamepad = null;
+let rightSource=null;
 
+// ★ 右手のみ取得
 for(const source of session.inputSources){
-
-// ★右手のみ
-if(source.handedness === "right" && source.gamepad){
-gamepad = source.gamepad;
+if(source.handedness==="right"){
+rightSource=source;
 break;
 }
-
 }
+
+// 左は完全無視
+if(!rightSource){
+gamepad=null;
+return;
+}
+
+// ★ controllerを右手に差し替え
+const index = session.inputSources.indexOf(rightSource);
+const newController = renderer.xr.getController(index);
+
+// 既存を削除
+scene.remove(controller);
+controller = newController;
+scene.add(controller);
+
+// 筆を再アタッチ
+createBrush();
+
+gamepad = rightSource.gamepad || null;
 
 }
 
 function createBrush(){
+
+// すでに筆があれば削除（再生成用）
+if(controller.children.length>0){
+controller.clear();
+}
 
 const brush=new THREE.Group();
 
@@ -188,9 +196,7 @@ instancedMesh.frustumCulled=false;
 
 scene.add(instancedMesh);
 
-
-// ★ GPUバッファ初期化（重要）
-
+// 初期化
 dummy.position.set(0,0,-1000);
 dummy.scale.set(0,0,0);
 dummy.updateMatrix();
@@ -220,7 +226,6 @@ pos.setFromMatrixPosition(controller.matrixWorld);
 if(hasLast){
 
 const dist=pos.distanceTo(lastPos);
-
 const steps=Math.max(1,Math.floor(dist/STEP_DISTANCE));
 
 for(let i=1;i<=steps;i++){
@@ -300,9 +305,7 @@ clearAll();
 }
 
 function animate(){
-
 renderer.setAnimationLoop(render);
-
 }
 
 function render(){
@@ -312,27 +315,20 @@ const trigger=getTriggerValue();
 if(trigger>0.05){
 
 if(!drawing){
-
 hasLast=false;
 drawing=true;
-
 }
 
 draw();
 
 }else{
-
 drawing=false;
-
 }
 
 if(inkUpdated){
-
 instancedMesh.count=stampIndex;
 instancedMesh.instanceMatrix.needsUpdate=true;
-
 inkUpdated=false;
-
 }
 
 checkClear();
