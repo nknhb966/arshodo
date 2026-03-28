@@ -41,11 +41,12 @@ let lastSize=0.01;
 let fadeOutCount=0;
 const FADE_STEPS=8;
 
-const colorArray=new Float32Array(MAX_STAMPS*3);
-
 // ★ 色ホイール
 let colorWheel;
 let colorPointer;
+
+// ★ 筆先
+let tipMesh;
 
 init();
 animate();
@@ -106,6 +107,8 @@ new THREE.ConeGeometry(0.015,0.05,6),
 new THREE.MeshStandardMaterial({color:0x111111})
 );
 
+tipMesh = tip;
+
 stick.rotation.x=Math.PI/2;
 tip.rotation.x=-Math.PI/2;
 
@@ -116,7 +119,7 @@ brush.add(tip);
 
 brush.rotation.set(-Math.PI/3,0,Math.PI/2);
 
-// ★ 色ホイール追加
+// 色ホイール
 createColorWheel();
 colorWheel.position.z=-0.08;
 colorWheel.rotation.x=Math.PI;
@@ -184,18 +187,10 @@ instancedMesh=new THREE.InstancedMesh(geo,mat,MAX_STAMPS);
 instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 instancedMesh.frustumCulled=false;
 
-instancedMesh.instanceColor=new THREE.InstancedBufferAttribute(colorArray,3);
-
 scene.add(instancedMesh);
-
-dummy.scale.set(0,0,0);
-dummy.updateMatrix();
-instancedMesh.setMatrixAt(0,dummy.matrix);
-instancedMesh.count=1;
 
 }
 
-// ★ 毎フレーム右手gamepad取得
 function updateGamepad(){
 
 const session=renderer.xr.getSession();
@@ -215,7 +210,6 @@ if(!gamepad) return 0;
 return gamepad.buttons[0]?.value||0;
 }
 
-// ★ 色更新＋UI
 function updateColor(){
 
 if(!gamepad) return;
@@ -232,7 +226,6 @@ y=gamepad.axes[1];
 
 const len=Math.hypot(x,y);
 
-// 非表示条件
 if(len<0.15 || getTrigger()>0.05){
 colorWheel.visible=false;
 return;
@@ -244,7 +237,7 @@ let angle = Math.atan2(y, x);
 angle += Math.PI / 2;
 if(angle < 0) angle += Math.PI * 2;
 
-const hue=(angle+Math.PI)/(Math.PI*2);
+const hue=(angle)/(Math.PI*2);
 
 brushColor.setHSL(hue,1,0.5);
 
@@ -258,6 +251,11 @@ Math.sin(angle)*r,
 );
 
 colorPointer.material.color.copy(brushColor);
+
+// ★ 筆先の色更新
+if(tipMesh){
+tipMesh.material.color.copy(brushColor);
+}
 
 }
 
@@ -297,7 +295,6 @@ hasLast=true;
 
 }
 
-// リングバッファ
 function stamp(position,size){
 
 const index=stampIndex%MAX_STAMPS;
@@ -308,9 +305,8 @@ dummy.updateMatrix();
 
 instancedMesh.setMatrixAt(index,dummy.matrix);
 
-colorArray[index*3+0]=brushColor.r;
-colorArray[index*3+1]=brushColor.g;
-colorArray[index*3+2]=brushColor.b;
+// ★ ここが重要（色反映）
+instancedMesh.setColorAt(index, brushColor);
 
 stampIndex++;
 
