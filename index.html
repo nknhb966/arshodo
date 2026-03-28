@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道</title>
+<title>AR書道a</title>
 
 <style>
 body{
@@ -19,15 +19,13 @@ overflow:hidden;
 import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
 import { ARButton } from "https://unpkg.com/three@0.160.0/examples/jsm/webxr/ARButton.js";
 
-let scene,camera,renderer,controller;
+let scene,camera,renderer,controller=null;
 
 let drawing=false;
 
 const STEP_DISTANCE=0.005;
-
 const MIN_SIZE=0.001;
 const MAX_SIZE=0.030;
-
 const MAX_STAMPS=8000;
 
 let instancedMesh;
@@ -69,13 +67,11 @@ renderer.xr.enabled=true;
 document.body.appendChild(renderer.domElement);
 
 if(navigator.xr){
-
 document.body.appendChild(
 ARButton.createButton(renderer,{
 requiredFeatures:["local-floor"]
 })
 );
-
 }
 
 renderer.xr.addEventListener("sessionstart",onSessionStart);
@@ -83,7 +79,6 @@ renderer.xr.addEventListener("sessionstart",onSessionStart);
 const light=new THREE.HemisphereLight(0xffffff,0xbbbbff,1);
 scene.add(light);
 
-createBrush();
 createInkSystem();
 
 window.addEventListener("resize",resize);
@@ -94,16 +89,22 @@ function onSessionStart(){
 
 const session = renderer.xr.getSession();
 
-session.addEventListener("inputsourceschange",updateGamepad);
+session.addEventListener("inputsourceschange",updateInputSource);
 
-updateGamepad();
+updateInputSource();
 
 }
 
-function updateGamepad(){
+function updateInputSource(){
 
 const session = renderer.xr.getSession();
 if(!session) return;
+
+// ★ 古いcontroller削除（超重要）
+if(controller){
+scene.remove(controller);
+controller = null;
+}
 
 gamepad = null;
 
@@ -111,18 +112,18 @@ for(const source of session.inputSources){
 
 if(source.handedness === "right"){
 
-// ★ gamepad
+// ★ gamepad取得
 if(source.gamepad){
 gamepad = source.gamepad;
 }
 
-if(source.targetRaySpace){
-controller = renderer.xr.getController(
-  session.inputSources.indexOf(source)
-);
-
+// ★ controller取得（右手に完全一致）
+const index = session.inputSources.indexOf(source);
+controller = renderer.xr.getController(index);
 scene.add(controller);
-}
+
+// ★ 筆をここで生成（controller確定後）
+createBrush(controller);
 
 break;
 
@@ -132,7 +133,7 @@ break;
 
 }
 
-function createBrush(){
+function createBrush(target){
 
 const brush=new THREE.Group();
 
@@ -158,7 +159,7 @@ brush.rotation.x=-Math.PI/3;
 brush.add(stick);
 brush.add(tip);
 
-controller.add(brush);
+target.add(brush);
 
 }
 
@@ -182,9 +183,7 @@ instancedMesh.frustumCulled=false;
 
 scene.add(instancedMesh);
 
-
-// ★ GPUバッファ初期化（重要）
-
+// GPU初期化
 dummy.position.set(0,0,-1000);
 dummy.scale.set(0,0,0);
 dummy.updateMatrix();
@@ -209,18 +208,18 @@ return 0;
 
 function draw(){
 
+if(!controller) return;
+
 pos.setFromMatrixPosition(controller.matrixWorld);
 
 if(hasLast){
 
 const dist=pos.distanceTo(lastPos);
-
 const steps=Math.max(1,Math.floor(dist/STEP_DISTANCE));
 
 for(let i=1;i<=steps;i++){
 
 const t=i/steps;
-
 interp.lerpVectors(lastPos,pos,t);
 
 const trigger=getTriggerValue();
@@ -262,7 +261,6 @@ dummy.updateMatrix();
 instancedMesh.setMatrixAt(stampIndex,dummy.matrix);
 
 stampIndex++;
-
 inkUpdated=true;
 
 }
@@ -270,11 +268,8 @@ inkUpdated=true;
 function clearAll(){
 
 stampIndex=0;
-
 instancedMesh.count=0;
-
 instancedMesh.instanceMatrix.needsUpdate=true;
-
 hasLast=false;
 
 }
@@ -284,19 +279,15 @@ function checkClear(){
 if(!gamepad) return;
 
 if(gamepad.buttons.length>4){
-
 if(gamepad.buttons[4].pressed){
 clearAll();
 }
-
 }
 
 }
 
 function animate(){
-
 renderer.setAnimationLoop(render);
-
 }
 
 function render(){
@@ -306,27 +297,20 @@ const trigger=getTriggerValue();
 if(trigger>0.05){
 
 if(!drawing){
-
 hasLast=false;
 drawing=true;
-
 }
 
 draw();
 
 }else{
-
 drawing=false;
-
 }
 
 if(inkUpdated){
-
 instancedMesh.count=stampIndex;
 instancedMesh.instanceMatrix.needsUpdate=true;
-
 inkUpdated=false;
-
 }
 
 checkClear();
