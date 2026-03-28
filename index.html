@@ -2,51 +2,37 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道（最終安定版）</title>
-
+<title>AR書道（Quest完全対応版）</title>
 <style>
-body{
-margin:0;
-overflow:hidden;
-}
+body{ margin:0; overflow:hidden; }
 </style>
 </head>
 
 <body>
-
 <script type="module">
 
 import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
 import { ARButton } from "https://unpkg.com/three@0.160.0/examples/jsm/webxr/ARButton.js";
 
 let scene,camera,renderer;
-
-let controller0,controller1;
-let rightController=null;
+let controller0,controller1,rightController=null;
 
 let drawing=false;
-
-const STEP_DISTANCE=0.005;
-const MIN_SIZE=0.001;
-const MAX_SIZE=0.030;
-const MAX_STAMPS=8000;
-
-let instancedMesh;
-let stampIndex=0;
-
-let inkUpdated=false;
-
 let gamepad=null;
 
-// 色
-let brushColor = new THREE.Color(0x111111);
-let brushTip = null;
+const STEP_DISTANCE=0.005;
+const MIN_SIZE=0.003;
+const MAX_SIZE=0.03;
 
-const dummy=new THREE.Object3D();
+const meshes=[]; // ← ここが変更点
+const MAX_MESHES=2000;
+
+let brushColor=new THREE.Color(0x111111);
+let brushTip=null;
+
 const pos=new THREE.Vector3();
 const lastPos=new THREE.Vector3();
 const interp=new THREE.Vector3();
-
 let hasLast=false;
 
 init();
@@ -56,80 +42,49 @@ function init(){
 
 scene=new THREE.Scene();
 
-camera=new THREE.PerspectiveCamera(
-70,
-window.innerWidth/window.innerHeight,
-0.01,
-20
-);
+camera=new THREE.PerspectiveCamera(70,window.innerWidth/window.innerHeight,0.01,20);
 
-renderer=new THREE.WebGLRenderer({
-antialias:true,
-alpha:true
-});
-
+renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
 renderer.setSize(window.innerWidth,window.innerHeight);
 renderer.xr.enabled=true;
-
 document.body.appendChild(renderer.domElement);
 
-if(navigator.xr){
-document.body.appendChild(
-ARButton.createButton(renderer,{
-requiredFeatures:["local-floor"]
-})
-);
-}
+document.body.appendChild(ARButton.createButton(renderer,{requiredFeatures:["local-floor"]}));
 
-const light=new THREE.HemisphereLight(0xffffff,0xbbbbff,1);
-scene.add(light);
+scene.add(new THREE.HemisphereLight(0xffffff,0xbbbbff,1));
 
-// controller2本
-controller0 = renderer.xr.getController(0);
-controller1 = renderer.xr.getController(1);
-
+controller0=renderer.xr.getController(0);
+controller1=renderer.xr.getController(1);
 scene.add(controller0);
 scene.add(controller1);
 
-// 接続イベント
-controller0.addEventListener("connected", onConnected);
-controller1.addEventListener("connected", onConnected);
-
-createInkSystem();
+controller0.addEventListener("connected",onConnected);
+controller1.addEventListener("connected",onConnected);
 
 window.addEventListener("resize",resize);
 
 }
 
-function onConnected(event){
+function onConnected(e){
 
-const data = event.data;
+if(e.data.handedness==="right"){
+rightController=e.target;
+gamepad=e.data.gamepad;
 
-if(data.handedness === "right"){
-
-rightController = event.target;
-gamepad = data.gamepad || null;
-
-controller0.visible = (rightController === controller0);
-controller1.visible = (rightController === controller1);
+controller0.visible=(rightController===controller0);
+controller1.visible=(rightController===controller1);
 
 attachBrush();
-
 }
 
 }
 
 function attachBrush(){
 
-if(!rightController) return;
-
-controller0.clear();
-controller1.clear();
-
 const brush=new THREE.Group();
 
 const stick=new THREE.Mesh(
-new THREE.CylinderGeometry(0.012,0.012,0.25,6),
+new THREE.CylinderGeometry(0.01,0.01,0.25,6),
 new THREE.MeshStandardMaterial({color:0x884400})
 );
 
@@ -141,11 +96,7 @@ new THREE.MeshStandardMaterial({color:0x111111})
 stick.rotation.x=Math.PI/2;
 brushTip.rotation.x=-Math.PI/2;
 
-brushTip.position.z=0;
 stick.position.z=0.15;
-
-brush.rotation.z=Math.PI/2;
-brush.rotation.x=-Math.PI/3;
 
 brush.add(stick);
 brush.add(brushTip);
@@ -154,81 +105,31 @@ rightController.add(brush);
 
 }
 
-function createInkSystem(){
-
-const geo=new THREE.SphereGeometry(1,10,10);
-
-const mat=new THREE.MeshStandardMaterial({
-vertexColors:true,
-roughness:1
-});
-
-instancedMesh=new THREE.InstancedMesh(
-geo,
-mat,
-MAX_STAMPS
-);
-
-instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-instancedMesh.frustumCulled=false;
-
-scene.add(instancedMesh);
-
-// ★ ダミー初期化（ここが重要）
-dummy.position.set(0,0,-1000);
-dummy.scale.set(0,0,0);
-dummy.updateMatrix();
-
-instancedMesh.setMatrixAt(0,dummy.matrix);
-
-// ★ これで内部colorバッファ生成
-instancedMesh.setColorAt(0,new THREE.Color(0x000000));
-
-instancedMesh.count=1;
-
-instancedMesh.instanceMatrix.needsUpdate=true;
-
-}
-
-function updateColorFromStick(){
+function updateColor(){
 
 if(!gamepad) return;
 
-const x = gamepad.axes[2];
-const y = gamepad.axes[3];
+const x=gamepad.axes[2];
+const y=gamepad.axes[3];
 
-const dead = 0.2;
-if(Math.abs(x) < dead && Math.abs(y) < dead) return;
+if(Math.abs(x)<0.2 && Math.abs(y)<0.2) return;
 
-let angle = Math.atan2(y, x);
-let hue = (angle + Math.PI) / (Math.PI * 2);
+const angle=Math.atan2(y,x);
+const hue=(angle+Math.PI)/(Math.PI*2);
 
-let saturation = Math.min(1, Math.sqrt(x*x + y*y));
-let lightness = 0.4 + (y * 0.3);
+brushColor.setHSL(hue,1,0.5);
 
-brushColor.setHSL(hue, saturation, lightness);
-
-if(brushTip){
 brushTip.material.color.copy(brushColor);
-}
 
 }
 
-function getTriggerValue(){
+function trigger(){
 
 if(!gamepad) return 0;
-
-if(gamepad.buttons.length>0){
 return gamepad.buttons[0].value;
 }
 
-return 0;
-
-}
-
 function draw(){
-
-if(!rightController) return;
 
 pos.setFromMatrixPosition(rightController.matrixWorld);
 
@@ -240,24 +141,9 @@ const steps=Math.max(1,Math.floor(dist/STEP_DISTANCE));
 for(let i=1;i<=steps;i++){
 
 const t=i/steps;
-
 interp.lerpVectors(lastPos,pos,t);
 
-const trigger=getTriggerValue();
-
-let pressureSize=THREE.MathUtils.lerp(
-MIN_SIZE,
-MAX_SIZE,
-trigger
-);
-
-let speedSize=THREE.MathUtils.clamp(
-MAX_SIZE-dist*2,
-MIN_SIZE,
-MAX_SIZE
-);
-
-let size=(pressureSize+speedSize)*0.5;
+const size=THREE.MathUtils.lerp(MIN_SIZE,MAX_SIZE,trigger());
 
 stamp(interp,size);
 
@@ -272,51 +158,22 @@ hasLast=true;
 
 function stamp(position,size){
 
-if(stampIndex>=MAX_STAMPS) return;
-
-dummy.position.copy(position);
-dummy.scale.set(size,size,size);
-dummy.updateMatrix();
-
-instancedMesh.setMatrixAt(stampIndex,dummy.matrix);
-
-// ★ 色設定（これが効くようになる）
-instancedMesh.setColorAt(stampIndex, brushColor);
-
-stampIndex++;
-
-// ★ GPU反映
-if(instancedMesh.instanceColor){
-instancedMesh.instanceColor.needsUpdate = true;
+if(meshes.length>MAX_MESHES){
+const old=meshes.shift();
+scene.remove(old);
 }
 
-inkUpdated=true;
+const mesh=new THREE.Mesh(
+new THREE.SphereGeometry(size,6,6),
+new THREE.MeshStandardMaterial({
+color:brushColor
+})
+);
 
-}
+mesh.position.copy(position);
 
-function clearAll(){
-
-stampIndex=0;
-instancedMesh.count=0;
-instancedMesh.instanceMatrix.needsUpdate=true;
-
-if(instancedMesh.instanceColor){
-instancedMesh.instanceColor.needsUpdate=true;
-}
-
-hasLast=false;
-
-}
-
-function checkClear(){
-
-if(!gamepad) return;
-
-if(gamepad.buttons.length>4){
-if(gamepad.buttons[4].pressed){
-clearAll();
-}
-}
+scene.add(mesh);
+meshes.push(mesh);
 
 }
 
@@ -326,16 +183,14 @@ renderer.setAnimationLoop(render);
 
 function render(){
 
-updateColorFromStick();
+updateColor();
 
 if(!rightController){
 renderer.render(scene,camera);
 return;
 }
 
-const trigger=getTriggerValue();
-
-if(trigger>0.05){
+if(trigger()>0.05){
 
 if(!drawing){
 hasLast=false;
@@ -348,32 +203,16 @@ draw();
 drawing=false;
 }
 
-if(inkUpdated){
-instancedMesh.count=stampIndex;
-instancedMesh.instanceMatrix.needsUpdate=true;
-
-if(instancedMesh.instanceColor){
-instancedMesh.instanceColor.needsUpdate=true;
-}
-
-inkUpdated=false;
-}
-
-checkClear();
-
 renderer.render(scene,camera);
 
 }
 
 function resize(){
-
 camera.aspect=window.innerWidth/window.innerHeight;
 camera.updateProjectionMatrix();
 renderer.setSize(window.innerWidth,window.innerHeight);
-
 }
 
 </script>
-
 </body>
 </html>
