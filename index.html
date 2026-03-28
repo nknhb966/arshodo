@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道</title>
+<title>AR書道 Color Wheel</title>
 <style>
 body{margin:0;overflow:hidden;}
 </style>
@@ -43,7 +43,7 @@ const FADE_STEPS=8;
 
 const colorArray=new Float32Array(MAX_STAMPS*3);
 
-// 色ホイール
+// ★ 色ホイール
 let colorWheel;
 let colorPointer;
 
@@ -81,10 +81,12 @@ window.addEventListener("resize",resize);
 }
 
 function onConnected(e){
+
 if(e.data.handedness==="right"){
 rightController=e.target;
 attachBrush();
 }
+
 }
 
 function attachBrush(){
@@ -112,15 +114,12 @@ stick.position.z=0.15;
 brush.add(stick);
 brush.add(tip);
 
-// 筆の向き
 brush.rotation.set(-Math.PI/3,0,Math.PI/2);
 
-// ★ 色ホイール
+// ★ 色ホイール追加
 createColorWheel();
 colorWheel.position.z=-0.08;
-
-// ★ 重要：筆と垂直
-colorWheel.rotation.x = Math.PI;
+colorWheel.rotation.x=Math.PI;
 
 brush.add(colorWheel);
 
@@ -138,12 +137,16 @@ const geometry=new THREE.RingGeometry(radius*0.8,radius,segments);
 const colors=[];
 
 for(let i=0;i<=segments;i++){
+
 const t=i/segments;
+const hue=t;
+
 const c=new THREE.Color();
-c.setHSL(t,1,0.5);
+c.setHSL(hue,1,0.5);
 
 colors.push(c.r,c.g,c.b);
 colors.push(c.r,c.g,c.b);
+
 }
 
 geometry.setAttribute("color",new THREE.Float32BufferAttribute(colors,3));
@@ -177,6 +180,7 @@ roughness:1
 });
 
 instancedMesh=new THREE.InstancedMesh(geo,mat,MAX_STAMPS);
+
 instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 instancedMesh.frustumCulled=false;
 
@@ -184,8 +188,14 @@ instancedMesh.instanceColor=new THREE.InstancedBufferAttribute(colorArray,3);
 
 scene.add(instancedMesh);
 
+dummy.scale.set(0,0,0);
+dummy.updateMatrix();
+instancedMesh.setMatrixAt(0,dummy.matrix);
+instancedMesh.count=1;
+
 }
 
+// ★ 毎フレーム右手gamepad取得
 function updateGamepad(){
 
 const session=renderer.xr.getSession();
@@ -205,7 +215,7 @@ if(!gamepad) return 0;
 return gamepad.buttons[0]?.value||0;
 }
 
-// ★ 色更新（90°補正済み）
+// ★ 色更新＋UI
 function updateColor(){
 
 if(!gamepad) return;
@@ -230,14 +240,12 @@ return;
 
 colorWheel.visible=true;
 
-// ★ ここが修正ポイント
-let angle = Math.atan2(y,x) - Math.PI/2;
-if(angle < 0) angle += Math.PI*2;
+const angle=Math.atan2(y,x);
+const hue=(angle+Math.PI/2)/(Math.PI*2);
 
-const hue = angle/(Math.PI*2);
 brushColor.setHSL(hue,1,0.5);
 
-// ポインタ
+// ポインタ位置
 const r=0.055;
 
 colorPointer.position.set(
@@ -286,6 +294,7 @@ hasLast=true;
 
 }
 
+// リングバッファ
 function stamp(position,size){
 
 const index=stampIndex%MAX_STAMPS;
@@ -316,9 +325,25 @@ fadeOutCount--;
 }
 
 function clearAll(){
+
 stampIndex=0;
 instancedMesh.count=0;
 hasLast=false;
+
+}
+
+function checkButtons(){
+
+if(!gamepad) return;
+
+if(gamepad.buttons[4]?.pressed){
+clearAll();
+}
+
+if(gamepad.buttons[5]?.pressed){
+brushColor.set(0x111111);
+}
+
 }
 
 function animate(){
@@ -357,6 +382,8 @@ fadeOut();
 }
 
 }
+
+checkButtons();
 
 instancedMesh.count=Math.min(stampIndex,MAX_STAMPS);
 instancedMesh.instanceMatrix.needsUpdate=true;
