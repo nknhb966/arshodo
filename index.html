@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道（右手専用・安定版）</title>
+<title>AR書道</title>
 
 <style>
 body{
@@ -21,9 +21,9 @@ import { ARButton } from "https://unpkg.com/three@0.160.0/examples/jsm/webxr/ARB
 
 let scene,camera,renderer;
 
-// ★ コントローラー2本持ち
+// ★ 2本持ち
 let controller0,controller1;
-let rightController=null;
+let activeController=null;
 
 let drawing=false;
 
@@ -71,13 +71,11 @@ renderer.xr.enabled=true;
 document.body.appendChild(renderer.domElement);
 
 if(navigator.xr){
-
 document.body.appendChild(
 ARButton.createButton(renderer,{
 requiredFeatures:["local-floor"]
 })
 );
-
 }
 
 renderer.xr.addEventListener("sessionstart",onSessionStart);
@@ -85,12 +83,16 @@ renderer.xr.addEventListener("sessionstart",onSessionStart);
 const light=new THREE.HemisphereLight(0xffffff,0xbbbbff,1);
 scene.add(light);
 
-// ★ controllerを2本取得
+// ★ controller2本
 controller0 = renderer.xr.getController(0);
 controller1 = renderer.xr.getController(1);
 
 scene.add(controller0);
 scene.add(controller1);
+
+// ★ 両方に筆を付ける（あとで片方消す）
+createBrush(controller0);
+createBrush(controller1);
 
 createInkSystem();
 
@@ -101,9 +103,7 @@ window.addEventListener("resize",resize);
 function onSessionStart(){
 
 const session = renderer.xr.getSession();
-
 session.addEventListener("inputsourceschange",updateInputSource);
-
 updateInputSource();
 
 }
@@ -113,41 +113,39 @@ function updateInputSource(){
 const session = renderer.xr.getSession();
 if(!session) return;
 
-rightController = null;
-gamepad = null;
+activeController=null;
+gamepad=null;
 
-// ★ 右手を探す
+// 一旦両方表示
+controller0.visible = true;
+controller1.visible = true;
+
 for(const source of session.inputSources){
 
 if(source.handedness === "right"){
 
-// index取得
 const index = session.inputSources.indexOf(source);
 
-// controllerを特定
-if(index === 0) rightController = controller0;
-if(index === 1) rightController = controller1;
+if(index===0) activeController = controller0;
+if(index===1) activeController = controller1;
 
 gamepad = source.gamepad || null;
 
-break;
-
 }
 
 }
 
-// ★ 筆を右手に付ける
-attachBrush();
+// ★ 右以外を無効化
+if(activeController === controller0){
+controller1.visible = false;
+}
+if(activeController === controller1){
+controller0.visible = false;
+}
 
 }
 
-function attachBrush(){
-
-// 一旦全部削除（左右両方）
-controller0.clear();
-controller1.clear();
-
-if(!rightController) return;
+function createBrush(target){
 
 const brush=new THREE.Group();
 
@@ -173,8 +171,7 @@ brush.rotation.x=-Math.PI/3;
 brush.add(stick);
 brush.add(tip);
 
-// ★ 右手にだけ装着
-rightController.add(brush);
+target.add(brush);
 
 }
 
@@ -198,7 +195,6 @@ instancedMesh.frustumCulled=false;
 
 scene.add(instancedMesh);
 
-// 初期化
 dummy.position.set(0,0,-1000);
 dummy.scale.set(0,0,0);
 dummy.updateMatrix();
@@ -223,9 +219,9 @@ return 0;
 
 function draw(){
 
-if(!rightController) return;
+if(!activeController) return;
 
-pos.setFromMatrixPosition(rightController.matrixWorld);
+pos.setFromMatrixPosition(activeController.matrixWorld);
 
 if(hasLast){
 
@@ -235,7 +231,6 @@ const steps=Math.max(1,Math.floor(dist/STEP_DISTANCE));
 for(let i=1;i<=steps;i++){
 
 const t=i/steps;
-
 interp.lerpVectors(lastPos,pos,t);
 
 const trigger=getTriggerValue();
@@ -277,7 +272,6 @@ dummy.updateMatrix();
 instancedMesh.setMatrixAt(stampIndex,dummy.matrix);
 
 stampIndex++;
-
 inkUpdated=true;
 
 }
@@ -285,11 +279,8 @@ inkUpdated=true;
 function clearAll(){
 
 stampIndex=0;
-
 instancedMesh.count=0;
-
 instancedMesh.instanceMatrix.needsUpdate=true;
-
 hasLast=false;
 
 }
@@ -299,11 +290,9 @@ function checkClear(){
 if(!gamepad) return;
 
 if(gamepad.buttons.length>4){
-
 if(gamepad.buttons[4].pressed){
 clearAll();
 }
-
 }
 
 }
@@ -314,8 +303,7 @@ renderer.setAnimationLoop(render);
 
 function render(){
 
-// ★ 右手が無い場合は何もしない
-if(!rightController){
+if(!activeController){
 renderer.render(scene,camera);
 return;
 }
@@ -351,7 +339,6 @@ function resize(){
 
 camera.aspect=window.innerWidth/window.innerHeight;
 camera.updateProjectionMatrix();
-
 renderer.setSize(window.innerWidth,window.innerHeight);
 
 }
