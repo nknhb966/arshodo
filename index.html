@@ -2,296 +2,337 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道</title>
+<title>AR書道（InstancedMesh 色対応版）</title>
 <style>
-body{margin:0;overflow:hidden;}
+body { margin:0; overflow:hidden; }
 </style>
 </head>
-
 <body>
 <script type="module">
+
 import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
 import { ARButton } from "https://unpkg.com/three@0.160.0/examples/jsm/webxr/ARButton.js";
 
-let scene,camera,renderer;
-let controller0,controller1,rightController=null;
-let gamepad=null;
-let drawing=false;
+// -------------------- 基本設定 --------------------
+let scene, camera, renderer;
+let controller0, controller1, rightController = null;
+let gamepad = null;
 
-const STEP_DISTANCE=0.004;
-const MIN_SIZE=0.002;
-const MAX_SIZE=0.035;
-const MAX_STAMPS=4000;
+let drawing = false;
 
-let instancedMesh;
-let stampIndex=0;
-let lastSize=0.01;
-let fadeOutCount=0;
-const FADE_STEPS=8;
+// 描画関連
+const STEP_DISTANCE = 0.004;
+const MIN_SIZE = 0.002;
+const MAX_SIZE = 0.035;
+const MAX_STAMPS = 1800;
 
-const colorArray=new Float32Array(MAX_STAMPS*3);
-let brushColor=new THREE.Color(0x111111);
+let instancedMesh, stampIndex = 0;
+const colorArray = new Float32Array(MAX_STAMPS*3);
 
-const dummy=new THREE.Object3D();
-const pos=new THREE.Vector3();
-const lastPos=new THREE.Vector3();
-const interp=new THREE.Vector3();
-let hasLast=false;
+const dummy = new THREE.Object3D();
+const pos = new THREE.Vector3();
+const lastPos = new THREE.Vector3();
+const interp = new THREE.Vector3();
+let hasLast = false;
+let lastSize = 0.01;
 
-let tipMesh=null; // 筆先
-let colorWheel=null, colorPointer=null;
+// フェードアウト
+let fadeOutCount = 0;
+const FADE_STEPS = 8;
 
+// 筆色
+let brushColor = new THREE.Color(0x111111);
+let tipMesh = null;
+
+// 色ホイール
+let colorWheel, colorPointer;
+
+// -------------------- 初期化 --------------------
 init();
 animate();
 
-function init(){
-  scene=new THREE.Scene();
-  camera=new THREE.PerspectiveCamera(70,window.innerWidth/window.innerHeight,0.01,20);
+function init() {
+    scene = new THREE.Scene();
 
-  renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
-  renderer.setSize(window.innerWidth,window.innerHeight);
-  renderer.xr.enabled=true;
+    camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.01, 20);
 
-  document.body.appendChild(renderer.domElement);
-  document.body.appendChild(ARButton.createButton(renderer,{requiredFeatures:["local-floor"]}));
+    renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.xr.enabled = true;
+    document.body.appendChild(renderer.domElement);
+    document.body.appendChild(ARButton.createButton(renderer, {requiredFeatures:["local-floor"]}));
 
-  scene.add(new THREE.HemisphereLight(0xffffff,0xbbbbff,1));
+    scene.add(new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1));
 
-  controller0=renderer.xr.getController(0);
-  controller1=renderer.xr.getController(1);
-  scene.add(controller0);
-  scene.add(controller1);
+    controller0 = renderer.xr.getController(0);
+    controller1 = renderer.xr.getController(1);
 
-  controller0.addEventListener("connected",onConnected);
-  controller1.addEventListener("connected",onConnected);
+    scene.add(controller0);
+    scene.add(controller1);
 
-  createInkSystem();
-  window.addEventListener("resize",resize);
+    controller0.addEventListener("connected", onConnected);
+    controller1.addEventListener("connected", onConnected);
+
+    createInkSystem();
+
+    window.addEventListener("resize", resize);
 }
 
-function onConnected(e){
-  if(e.data.handedness==="right"){
-    rightController=e.target;
-    gamepad=e.data.gamepad;
-    attachBrush();
-  }
-}
-
-function attachBrush(){
-  controller0.clear();
-  controller1.clear();
-
-  const brush=new THREE.Group();
-
-  // 筆軸
-  const stick=new THREE.Mesh(
-    new THREE.CylinderGeometry(0.01,0.01,0.25,6),
-    new THREE.MeshStandardMaterial({color:0x884400})
-  );
-
-  // 筆先
-  tipMesh = new THREE.Mesh(
-    new THREE.ConeGeometry(0.015,0.05,6),
-    new THREE.MeshStandardMaterial({color:0x111111})
-  );
-
-  stick.rotation.x=Math.PI/2;
-  tipMesh.rotation.x=-Math.PI/2;
-  stick.position.z=0.15;
-
-  brush.add(stick);
-  brush.add(tipMesh);
-
-  brush.rotation.set(-Math.PI/3,0,Math.PI/2);
-
-  createColorWheel();
-  colorWheel.position.z=-0.08;
-  colorWheel.rotation.x=Math.PI;
-  brush.add(colorWheel);
-
-  rightController.add(brush);
-}
-
-function createColorWheel(){
-  const radius=0.06;
-  const segments=64;
-  const geometry=new THREE.RingGeometry(radius*0.8,radius,segments);
-  const colors=[];
-  for(let i=0;i<=segments;i++){
-    const hue=i/segments;
-    const c=new THREE.Color();
-    c.setHSL(hue,1,0.5);
-    colors.push(c.r,c.g,c.b);
-    colors.push(c.r,c.g,c.b);
-  }
-  geometry.setAttribute("color",new THREE.Float32BufferAttribute(colors,3));
-  const material=new THREE.MeshBasicMaterial({
-    vertexColors:true, side:THREE.DoubleSide, transparent:true, opacity:0.7
-  });
-  colorWheel=new THREE.Mesh(geometry,material);
-
-  // ポインタ
-  colorPointer=new THREE.Mesh(
-    new THREE.SphereGeometry(0.008,8,8),
-    new THREE.MeshBasicMaterial({color:0xffffff})
-  );
-  colorWheel.add(colorPointer);
-}
-
-function createInkSystem(){
-  const geo=new THREE.SphereGeometry(1,6,6);
-  const mat=new THREE.MeshStandardMaterial({vertexColors:true,roughness:1});
-  instancedMesh=new THREE.InstancedMesh(geo,mat,MAX_STAMPS);
-  instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-  instancedMesh.frustumCulled=false;
-  instancedMesh.instanceColor=new THREE.InstancedBufferAttribute(colorArray,3);
-  scene.add(instancedMesh);
-
-  dummy.scale.set(0,0,0);
-  dummy.updateMatrix();
-  instancedMesh.setMatrixAt(0,dummy.matrix);
-  instancedMesh.count=1;
-}
-
-function updateGamepad(){
-  const session=renderer.xr.getSession();
-  if(!session) return;
-  for(const source of session.inputSources){
-    if(source.handedness==="right" && source.gamepad){
-      gamepad=source.gamepad;
-      return;
+// -------------------- コントローラー接続 --------------------
+function onConnected(e) {
+    if (e.data.handedness === "right") {
+        rightController = e.target;
+        attachBrush();
     }
-  }
 }
 
-function getTrigger(){
-  if(!gamepad) return 0;
-  return gamepad.buttons[0]?.value||0;
+// -------------------- 筆と色ホイール --------------------
+function attachBrush() {
+    controller0.clear();
+    controller1.clear();
+
+    const brush = new THREE.Group();
+
+    // 柄
+    const stick = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.01,0.01,0.25,6),
+        new THREE.MeshStandardMaterial({color:0x884400})
+    );
+
+    // 筆先
+    tipMesh = new THREE.Mesh(
+        new THREE.ConeGeometry(0.015,0.05,6),
+        new THREE.MeshStandardMaterial({color:0x111111})
+    );
+
+    stick.rotation.x = Math.PI/2;
+    tipMesh.rotation.x = -Math.PI/2;
+    stick.position.z = 0.15;
+
+    brush.add(stick);
+    brush.add(tipMesh);
+
+    brush.rotation.set(-Math.PI/3, 0, Math.PI/2);
+
+    createColorWheel();
+    colorWheel.position.z = -0.08;
+    colorWheel.rotation.x = Math.PI;
+    brush.add(colorWheel);
+
+    rightController.add(brush);
 }
 
-function updateColor(){
-  if(!gamepad || !colorWheel) return;
-  let x=0,y=0;
-  if(gamepad.axes.length>=4){
-    x=gamepad.axes[2]; y=gamepad.axes[3];
-  }else if(gamepad.axes.length>=2){
-    x=gamepad.axes[0]; y=gamepad.axes[1];
-  }
+// -------------------- 色ホイール作成 --------------------
+function createColorWheel() {
+    const radius = 0.06;
+    const segments = 64;
 
-  const len=Math.hypot(x,y);
-  if(len<0.15 || getTrigger()>0.05){
-    colorWheel.visible=false;
-  }else{
-    colorWheel.visible=true;
-    let angle=Math.atan2(y,x);
-    angle+=Math.PI/2;
-    if(angle<0) angle+=Math.PI*2;
-    const hue=(angle+Math.PI)/(Math.PI*2);
-    brushColor.setHSL(hue,1,0.5);
+    const geometry = new THREE.RingGeometry(radius*0.8, radius, segments);
+    const colors = [];
 
-    const r=0.055;
-    colorPointer.position.set(Math.cos(angle)*r, Math.sin(angle)*r,0);
-    colorPointer.material.color.copy(brushColor);
-
-    if(tipMesh) tipMesh.material.color.copy(brushColor);
-  }
-}
-
-function draw(){
-  pos.setFromMatrixPosition(rightController.matrixWorld);
-  if(hasLast){
-    const dist=pos.distanceTo(lastPos);
-    const steps=Math.max(2,Math.floor(dist/STEP_DISTANCE));
-    for(let i=1;i<=steps;i++){
-      const t=i/steps;
-      interp.lerpVectors(lastPos,pos,t);
-      const pressure=getTrigger();
-      const speed=dist;
-      const speedFactor=THREE.MathUtils.clamp(1.0-speed*20.0,0.2,1.0);
-      let targetSize=MAX_SIZE*pressure*speedFactor;
-      targetSize=Math.max(targetSize,MIN_SIZE);
-      const size=THREE.MathUtils.lerp(lastSize,targetSize,0.25);
-      lastSize=size;
-      stamp(interp,size);
+    for (let i=0; i<=segments; i++) {
+        const hue = i / segments;
+        const c = new THREE.Color();
+        c.setHSL(hue,1,0.5);
+        colors.push(c.r,c.g,c.b);
+        colors.push(c.r,c.g,c.b);
     }
-  }
-  lastPos.copy(pos);
-  hasLast=true;
+
+    geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors,3));
+
+    const material = new THREE.MeshBasicMaterial({
+        vertexColors:true, side:THREE.DoubleSide, transparent:true, opacity:0.7
+    });
+
+    colorWheel = new THREE.Mesh(geometry, material);
+
+    // ポインタ
+    colorPointer = new THREE.Mesh(
+        new THREE.SphereGeometry(0.008,8,8),
+        new THREE.MeshBasicMaterial({color:0xffffff})
+    );
+    colorWheel.add(colorPointer);
 }
 
-function stamp(position,size){
-  const index = stampIndex % MAX_STAMPS;
+// -------------------- インスタンス化システム --------------------
+function createInkSystem() {
+    const geo = new THREE.SphereGeometry(1,6,6);
+    const mat = new THREE.MeshStandardMaterial({
+        vertexColors:true, roughness:1
+    });
 
-  dummy.position.copy(position);
-  dummy.scale.set(size,size*0.6,size);
-  dummy.updateMatrix();
-  instancedMesh.setMatrixAt(index,dummy.matrix);
+    instancedMesh = new THREE.InstancedMesh(geo, mat, MAX_STAMPS);
+    instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    instancedMesh.frustumCulled = false;
+    instancedMesh.instanceColor = new THREE.InstancedBufferAttribute(colorArray, 3);
 
-  // ★ここで色を反映
-  colorArray[index*3+0] = brushColor.r;
-  colorArray[index*3+1] = brushColor.g;
-  colorArray[index*3+2] = brushColor.b;
+    scene.add(instancedMesh);
 
-  // ★更新フラグを即時セット
-  instancedMesh.instanceColor.needsUpdate = true;
-
-  stampIndex++;
+    dummy.scale.set(0,0,0);
+    dummy.updateMatrix();
+    instancedMesh.setMatrixAt(0, dummy.matrix);
+    instancedMesh.count = 1;
 }
 
-function fadeOut(){
-  if(fadeOutCount<=0) return;
-  const size=lastSize*(fadeOutCount/FADE_STEPS);
-  stamp(pos,size);
-  fadeOutCount--;
+// -------------------- ゲームパッド更新 --------------------
+function updateGamepad() {
+    const session = renderer.xr.getSession();
+    if(!session) return;
+    for(const source of session.inputSources) {
+        if(source.handedness==="right" && source.gamepad){
+            gamepad = source.gamepad;
+            return;
+        }
+    }
 }
 
-function clearAll(){
-  stampIndex=0;
-  instancedMesh.count=0;
-  hasLast=false;
+// -------------------- トリガー取得 --------------------
+function getTrigger() {
+    if(!gamepad) return 0;
+    return gamepad.buttons[0]?.value || 0;
 }
 
-function checkButtons(){
-  if(!gamepad) return;
-  if(gamepad.buttons[4]?.pressed) clearAll();
-  if(gamepad.buttons[5]?.pressed) brushColor.set(0x111111);
+// -------------------- 色更新 --------------------
+function updateColor() {
+    if(!gamepad) return;
+    let x=0, y=0;
+    if(gamepad.axes.length>=4){
+        x=gamepad.axes[2]; y=gamepad.axes[3];
+    }else if(gamepad.axes.length>=2){
+        x=gamepad.axes[0]; y=gamepad.axes[1];
+    }
+
+    const len = Math.hypot(x,y);
+
+    if(len < 0.15 || getTrigger() > 0.05){
+        colorWheel.visible = false;
+    }else{
+        colorWheel.visible = true;
+        let angle = Math.atan2(y,x);
+        angle += Math.PI/2;
+        if(angle <0) angle += Math.PI*2;
+        const hue = (angle+Math.PI)/(Math.PI*2);
+        brushColor.setHSL(hue,1,0.5);
+
+        const r=0.055;
+        colorPointer.position.set(Math.cos(angle)*r, Math.sin(angle)*r, 0);
+        colorPointer.material.color.copy(brushColor);
+
+        // 筆先色同期
+        if(tipMesh) tipMesh.material.color.copy(brushColor);
+    }
 }
 
-function animate(){
-  renderer.setAnimationLoop(render);
+// -------------------- 描画 --------------------
+function draw() {
+    pos.setFromMatrixPosition(rightController.matrixWorld);
+
+    if(hasLast){
+        const dist = pos.distanceTo(lastPos);
+        const steps = Math.max(2, Math.floor(dist/STEP_DISTANCE));
+
+        for(let i=1;i<=steps;i++){
+            const t = i/steps;
+            interp.lerpVectors(lastPos, pos, t);
+
+            const pressure = getTrigger();
+            const speed = dist;
+            const speedFactor = THREE.MathUtils.clamp(1.0 - speed*20.0,0.2,1.0);
+
+            let targetSize = MAX_SIZE*pressure*speedFactor;
+            targetSize = Math.max(targetSize, MIN_SIZE);
+
+            const size = THREE.MathUtils.lerp(lastSize, targetSize, 0.25);
+            lastSize = size;
+
+            stamp(interp, size);
+        }
+    }
+
+    lastPos.copy(pos);
+    hasLast = true;
 }
 
-function render(){
-  updateGamepad();
-  updateColor();
+// -------------------- スタンプ --------------------
+function stamp(position, size) {
+    const index = stampIndex % MAX_STAMPS;
 
-  if(!rightController){
+    dummy.position.copy(position);
+    dummy.scale.set(size, size*0.6, size);
+    dummy.updateMatrix();
+    instancedMesh.setMatrixAt(index, dummy.matrix);
+
+    // 色更新
+    colorArray[index*3+0] = brushColor.r;
+    colorArray[index*3+1] = brushColor.g;
+    colorArray[index*3+2] = brushColor.b;
+    instancedMesh.instanceColor.needsUpdate = true;
+
+    stampIndex++;
+}
+
+// -------------------- フェードアウト --------------------
+function fadeOut() {
+    if(fadeOutCount<=0) return;
+    const size = lastSize*(fadeOutCount/FADE_STEPS);
+    stamp(pos, size);
+    fadeOutCount--;
+}
+
+// -------------------- 全消去 --------------------
+function clearAll() {
+    stampIndex=0;
+    instancedMesh.count=0;
+    hasLast=false;
+}
+
+// -------------------- ボタンチェック --------------------
+function checkButtons() {
+    if(!gamepad) return;
+    if(gamepad.buttons[4]?.pressed) clearAll();
+    if(gamepad.buttons[5]?.pressed) brushColor.set(0x111111);
+}
+
+// -------------------- アニメーション --------------------
+function animate() {
+    renderer.setAnimationLoop(render);
+}
+
+function render() {
+    updateGamepad();
+    updateColor();
+
+    if(!rightController){
+        renderer.render(scene,camera);
+        return;
+    }
+
+    const t = getTrigger();
+
+    if(t>0.05){
+        if(!drawing){ hasLast=false; drawing=true; }
+        draw();
+        fadeOutCount = FADE_STEPS;
+    }else{
+        if(drawing){ drawing=false; fadeOut(); }
+        else fadeOut();
+    }
+
+    checkButtons();
+
+    instancedMesh.count = Math.min(stampIndex, MAX_STAMPS);
+    instancedMesh.instanceMatrix.needsUpdate = true;
+
     renderer.render(scene,camera);
-    return;
-  }
-
-  const t=getTrigger();
-  if(t>0.05){
-    if(!drawing){ hasLast=false; drawing=true; }
-    draw();
-    fadeOutCount=FADE_STEPS;
-  }else{
-    if(drawing){ drawing=false; fadeOut(); }else{ fadeOut(); }
-  }
-
-  checkButtons();
-  instancedMesh.count=Math.min(stampIndex,MAX_STAMPS);
-  instancedMesh.instanceMatrix.needsUpdate=true;
-  instancedMesh.instanceColor.needsUpdate=true;
-
-  renderer.render(scene,camera);
 }
 
+// -------------------- リサイズ --------------------
 function resize(){
-  camera.aspect=window.innerWidth/window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth,window.innerHeight);
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
 }
+
 </script>
 </body>
 </html>
