@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道</title>
+<title>AR書道ink</title>
 <style>
 body{margin:0;overflow:hidden;}
 </style>
@@ -183,6 +183,12 @@ instancedMesh=new THREE.InstancedMesh(geo,mat,MAX_STAMPS);
 
 instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 instancedMesh.frustumCulled=false;
+
+// ★ これを追加（超重要）
+instancedMesh.instanceColor = new THREE.InstancedBufferAttribute(
+new Float32Array(MAX_STAMPS * 3),
+3
+);
 
 scene.add(instancedMesh);
 
