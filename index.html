@@ -160,15 +160,26 @@ function updateColor(){
 
 if(!gamepad) return;
 
-const x=gamepad.axes[2];
-const y=gamepad.axes[3];
+// ★ 安全に取得
+let x = 0;
+let y = 0;
 
-if(Math.abs(x)<0.2 && Math.abs(y)<0.2) return;
+if(gamepad.axes.length >= 4){
+x = gamepad.axes[2];
+y = gamepad.axes[3];
+}else if(gamepad.axes.length >= 2){
+x = gamepad.axes[0];
+y = gamepad.axes[1];
+}
 
-const angle=Math.atan2(y,x);
-const hue=(angle+Math.PI)/(Math.PI*2);
+// デッドゾーン
+if(Math.abs(x) < 0.2 && Math.abs(y) < 0.2) return;
 
-brushColor.setHSL(hue,1,0.5);
+// 角度→色
+const angle = Math.atan2(y, x);
+const hue = (angle + Math.PI) / (Math.PI * 2);
+
+brushColor.setHSL(hue, 1, 0.5);
 
 }
 
