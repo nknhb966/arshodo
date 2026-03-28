@@ -89,42 +89,41 @@ attachBrush();
 
 }
 
+let tipMesh = null; // 追加：筆先メッシュをグローバルに保持
+
 function attachBrush(){
+    controller0.clear();
+    controller1.clear();
 
-controller0.clear();
-controller1.clear();
+    const brush=new THREE.Group();
 
-const brush=new THREE.Group();
+    const stick=new THREE.Mesh(
+        new THREE.CylinderGeometry(0.01,0.01,0.25,6),
+        new THREE.MeshStandardMaterial({color:0x884400})
+    );
 
-const stick=new THREE.Mesh(
-new THREE.CylinderGeometry(0.01,0.01,0.25,6),
-new THREE.MeshStandardMaterial({color:0x884400})
-);
+    tipMesh = new THREE.Mesh(
+        new THREE.ConeGeometry(0.015,0.05,6),
+        new THREE.MeshStandardMaterial({color:0x111111})
+    );
 
-const tip=new THREE.Mesh(
-new THREE.ConeGeometry(0.015,0.05,6),
-new THREE.MeshStandardMaterial({color:0x111111})
-);
+    stick.rotation.x=Math.PI/2;
+    tipMesh.rotation.x=-Math.PI/2;
 
-stick.rotation.x=Math.PI/2;
-tip.rotation.x=-Math.PI/2;
+    stick.position.z=0.15;
 
-stick.position.z=0.15;
+    brush.add(stick);
+    brush.add(tipMesh);
 
-brush.add(stick);
-brush.add(tip);
+    brush.rotation.set(-Math.PI/3,0,Math.PI/2);
 
-brush.rotation.set(-Math.PI/3,0,Math.PI/2);
+    createColorWheel();
+    colorWheel.position.z=-0.08;
+    colorWheel.rotation.x=Math.PI;
 
-// ★ 色ホイール追加
-createColorWheel();
-colorWheel.position.z=-0.08;
-colorWheel.rotation.x=Math.PI;
+    brush.add(colorWheel);
 
-brush.add(colorWheel);
-
-rightController.add(brush);
-
+    rightController.add(brush);
 }
 
 function createColorWheel(){
@@ -215,50 +214,47 @@ if(!gamepad) return 0;
 return gamepad.buttons[0]?.value||0;
 }
 
-// ★ 色更新＋UI
 function updateColor(){
+    if(!gamepad) return;
 
-if(!gamepad) return;
+    let x=0,y=0;
 
-let x=0,y=0;
+    if(gamepad.axes.length>=4){
+        x=gamepad.axes[2];
+        y=gamepad.axes[3];
+    }else if(gamepad.axes.length>=2){
+        x=gamepad.axes[0];
+        y=gamepad.axes[1];
+    }
 
-if(gamepad.axes.length>=4){
-x=gamepad.axes[2];
-y=gamepad.axes[3];
-}else if(gamepad.axes.length>=2){
-x=gamepad.axes[0];
-y=gamepad.axes[1];
-}
+    const len=Math.hypot(x,y);
 
-const len=Math.hypot(x,y);
+    // 非表示条件
+    if(len<0.15 || getTrigger()>0.05){
+        colorWheel.visible=false;
+    }else{
+        colorWheel.visible=true;
 
-// 非表示条件
-if(len<0.15 || getTrigger()>0.05){
-colorWheel.visible=false;
-return;
-}
+        let angle = Math.atan2(y, x);
+        angle += Math.PI / 2;
+        if(angle < 0) angle += Math.PI * 2;
 
-colorWheel.visible=true;
+        const hue=(angle+Math.PI)/(Math.PI*2);
+        brushColor.setHSL(hue,1,0.5);
 
-let angle = Math.atan2(y, x);
-angle += Math.PI / 2;
-if(angle < 0) angle += Math.PI * 2;
+        const r=0.055;
+        colorPointer.position.set(
+            Math.cos(angle)*r,
+            Math.sin(angle)*r,
+            0
+        );
+        colorPointer.material.color.copy(brushColor);
 
-const hue=(angle+Math.PI)/(Math.PI*2);
-
-brushColor.setHSL(hue,1,0.5);
-
-// ポインタ位置
-const r=0.055;
-
-colorPointer.position.set(
-Math.cos(angle)*r,
-Math.sin(angle)*r,
-0
-);
-
-colorPointer.material.color.copy(brushColor);
-
+        // ★ ここで筆先の色も更新
+        if(tipMesh){
+            tipMesh.material.color.copy(brushColor);
+        }
+    }
 }
 
 function draw(){
