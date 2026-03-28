@@ -103,39 +103,16 @@ function attachBrush(){
 function createInkSystem(){
     const geo = new THREE.SphereGeometry(1,6,6);
 
-    // カスタムシェーダー対応マテリアル
-    const mat = new THREE.MeshBasicMaterial();
-    mat.onBeforeCompile = shader => {
-
-        shader.vertexShader = `
-            attribute vec3 instanceColor;
-            varying vec3 vInstanceColor;
-        ` + shader.vertexShader;
-
-        shader.vertexShader = shader.vertexShader.replace(
-            `#include <begin_vertex>`,
-            `
-            #include <begin_vertex>
-            vInstanceColor = instanceColor;
-            `
-        );
-
-        shader.fragmentShader = `
-            varying vec3 vInstanceColor;
-        ` + shader.fragmentShader;
-
-        shader.fragmentShader = shader.fragmentShader.replace(
-            `vec4 diffuseColor = vec4( diffuse, opacity );`,
-            `vec4 diffuseColor = vec4(vInstanceColor, opacity );`
-        );
-
-        shader.attributes.instanceColor = instancedMesh.instanceColor;
-    };
+    // 安定版：vertexColors:true を使う
+    const mat = new THREE.MeshBasicMaterial({ vertexColors: true });
 
     instancedMesh = new THREE.InstancedMesh(geo, mat, MAX_STAMPS);
     instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     instancedMesh.frustumCulled = false;
+
+    // インスタンスカラーをセット
     instancedMesh.instanceColor = new THREE.InstancedBufferAttribute(colorArray, 3);
+
     instancedMesh.count = 0;
     scene.add(instancedMesh);
 }
