@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道a</title>
+<title>AR書道</title>
 
 <style>
 body{
@@ -19,11 +19,7 @@ overflow:hidden;
 import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
 import { ARButton } from "https://unpkg.com/three@0.160.0/examples/jsm/webxr/ARButton.js";
 
-let scene,camera,renderer;
-
-// ★ 右手専用
-let rightController=null;
-let rightGamepad=null;
+let scene,camera,renderer,controller;
 
 let drawing=false;
 
@@ -38,6 +34,8 @@ let instancedMesh;
 let stampIndex=0;
 
 let inkUpdated=false;
+
+let gamepad=null;
 
 const dummy=new THREE.Object3D();
 const pos=new THREE.Vector3();
@@ -85,6 +83,25 @@ renderer.xr.addEventListener("sessionstart",onSessionStart);
 const light=new THREE.HemisphereLight(0xffffff,0xbbbbff,1);
 scene.add(light);
 
+controller = renderer.xr.getController(0);
+
+// ★ 右手のみ使用
+renderer.xr.addEventListener("sessionstart", () => {
+  const session = renderer.xr.getSession();
+
+  for (const source of session.inputSources) {
+    if (source.handedness === "right") {
+      controller = renderer.xr.getController(
+        session.inputSources.indexOf(source)
+      );
+      scene.add(controller);
+      break;
+    }
+  }
+});
+scene.add(controller);
+
+createBrush();
 createInkSystem();
 
 window.addEventListener("resize",resize);
@@ -95,45 +112,25 @@ function onSessionStart(){
 
 const session = renderer.xr.getSession();
 
-session.addEventListener("inputsourceschange",updateInputSources);
+session.addEventListener("inputsourceschange",updateGamepad);
 
-updateInputSources();
+updateGamepad();
 
 }
 
-// ★ 右手だけ取得して紐付け
-function updateInputSources(){
+function updateGamepad(){
 
 const session = renderer.xr.getSession();
 if(!session) return;
 
-rightController=null;
-rightGamepad=null;
+gamepad = null; // ← 毎回リセット
 
-const sources = session.inputSources;
+for(const source of session.inputSources){
 
-for(let i=0;i<sources.length;i++){
+// ★ 右手のみ許可
+if(source.handedness === "right" && source.gamepad){
 
-const source = sources[i];
-
-if(source.handedness==="right"){
-
-// controller取得（index対応）
-rightController = renderer.xr.getController(i);
-
-// gamepad取得
-if(source.gamepad){
-rightGamepad = source.gamepad;
-}
-
-// 初回のみ追加
-if(rightController && !rightController.parent){
-
-scene.add(rightController);
-createBrush(rightController);
-
-}
-
+gamepad = source.gamepad;
 break;
 
 }
@@ -142,7 +139,7 @@ break;
 
 }
 
-function createBrush(ctrl){
+function createBrush(){
 
 const brush=new THREE.Group();
 
@@ -168,7 +165,7 @@ brush.rotation.x=-Math.PI/3;
 brush.add(stick);
 brush.add(tip);
 
-ctrl.add(brush);
+controller.add(brush);
 
 }
 
@@ -192,7 +189,9 @@ instancedMesh.frustumCulled=false;
 
 scene.add(instancedMesh);
 
-// GPU初期化
+
+// ★ GPUバッファ初期化（重要）
+
 dummy.position.set(0,0,-1000);
 dummy.scale.set(0,0,0);
 dummy.updateMatrix();
@@ -205,10 +204,10 @@ instancedMesh.instanceMatrix.needsUpdate=true;
 
 function getTriggerValue(){
 
-if(!rightGamepad) return 0;
+if(!gamepad) return 0;
 
-if(rightGamepad.buttons.length>0){
-return rightGamepad.buttons[0].value;
+if(gamepad.buttons.length>0){
+return gamepad.buttons[0].value;
 }
 
 return 0;
@@ -217,9 +216,7 @@ return 0;
 
 function draw(){
 
-if(!rightController) return;
-
-pos.setFromMatrixPosition(rightController.matrixWorld);
+pos.setFromMatrixPosition(controller.matrixWorld);
 
 if(hasLast){
 
@@ -291,11 +288,11 @@ hasLast=false;
 
 function checkClear(){
 
-if(!rightGamepad) return;
+if(!gamepad) return;
 
-if(rightGamepad.buttons.length>4){
+if(gamepad.buttons.length>4){
 
-if(rightGamepad.buttons[4].pressed){
+if(gamepad.buttons[4].pressed){
 clearAll();
 }
 
