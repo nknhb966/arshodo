@@ -109,9 +109,12 @@ function updateGamepad(){
 const session = renderer.xr.getSession();
 if(!session) return;
 
+gamepad = null;
+
 for(const source of session.inputSources){
 
-if(source.gamepad){
+// ★ 右手だけを許可
+if(source.handedness === "right" && source.gamepad){
 
 gamepad = source.gamepad;
 break;
