@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道（カラー操作対応）</title>
+<title>AR書道（カラー完全版）</title>
 
 <style>
 body{
@@ -38,7 +38,7 @@ let inkUpdated=false;
 
 let gamepad=null;
 
-// ★ 色
+// 色
 let brushColor = new THREE.Color(0x111111);
 let brushTip = null;
 
@@ -110,9 +110,11 @@ if(data.handedness === "right"){
 rightController = event.target;
 gamepad = data.gamepad || null;
 
+// 左手は非表示
 controller0.visible = (rightController === controller0);
 controller1.visible = (rightController === controller1);
 
+// 筆を付ける
 attachBrush();
 
 }
@@ -159,7 +161,7 @@ function createInkSystem(){
 const geo=new THREE.SphereGeometry(1,10,10);
 
 const mat=new THREE.MeshStandardMaterial({
-vertexColors:true, // ★ 重要
+vertexColors:true,
 roughness:1
 });
 
@@ -173,21 +175,23 @@ instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 instancedMesh.frustumCulled=false;
 
 // ★ 色バッファ
-instancedMesh.instanceColor = new THREE.InstancedBufferAttribute(
-new Float32Array(MAX_STAMPS * 3),
-3
-);
+const colors = new Float32Array(MAX_STAMPS * 3);
+instancedMesh.instanceColor = new THREE.InstancedBufferAttribute(colors, 3);
 
 scene.add(instancedMesh);
 
-// 初期化
+// 初期化（ダミー）
 dummy.position.set(0,0,-1000);
 dummy.scale.set(0,0,0);
 dummy.updateMatrix();
 
 instancedMesh.setMatrixAt(0,dummy.matrix);
+instancedMesh.setColorAt(0,new THREE.Color(0x000000));
+
 instancedMesh.count=1;
+
 instancedMesh.instanceMatrix.needsUpdate=true;
+instancedMesh.instanceColor.needsUpdate=true;
 
 }
 
@@ -195,24 +199,25 @@ function updateColorFromStick(){
 
 if(!gamepad) return;
 
-// Quest系：右スティック
 const x = gamepad.axes[2];
 const y = gamepad.axes[3];
 
 const dead = 0.2;
 if(Math.abs(x) < dead && Math.abs(y) < dead) return;
 
-// 角度 → 色相
+// 色相
 let angle = Math.atan2(y, x);
 let hue = (angle + Math.PI) / (Math.PI * 2);
 
-// ★ 彩度・明度も操作
+// 彩度
 let saturation = Math.min(1, Math.sqrt(x*x + y*y));
+
+// 明度
 let lightness = 0.4 + (y * 0.3);
 
 brushColor.setHSL(hue, saturation, lightness);
 
-// ★ 筆先にも反映
+// 筆先にも反映
 if(brushTip){
 brushTip.material.color.copy(brushColor);
 }
@@ -281,15 +286,17 @@ if(stampIndex>=MAX_STAMPS) return;
 
 dummy.position.copy(position);
 dummy.scale.set(size,size,size);
-
 dummy.updateMatrix();
 
 instancedMesh.setMatrixAt(stampIndex,dummy.matrix);
 
-// ★ 色を設定
+// ★ 色設定
 instancedMesh.setColorAt(stampIndex, brushColor);
 
 stampIndex++;
+
+instancedMesh.instanceColor.needsUpdate = true;
+
 inkUpdated=true;
 
 }
@@ -299,6 +306,7 @@ function clearAll(){
 stampIndex=0;
 instancedMesh.count=0;
 instancedMesh.instanceMatrix.needsUpdate=true;
+instancedMesh.instanceColor.needsUpdate=true;
 hasLast=false;
 
 }
@@ -321,7 +329,7 @@ renderer.setAnimationLoop(render);
 
 function render(){
 
-updateColorFromStick(); // ★ 色更新
+updateColorFromStick();
 
 if(!rightController){
 renderer.render(scene,camera);
@@ -346,7 +354,7 @@ drawing=false;
 if(inkUpdated){
 instancedMesh.count=stampIndex;
 instancedMesh.instanceMatrix.needsUpdate=true;
-instancedMesh.instanceColor.needsUpdate = true; // ★ 重要
+instancedMesh.instanceColor.needsUpdate=true;
 inkUpdated=false;
 }
 
