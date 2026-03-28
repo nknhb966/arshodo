@@ -2,9 +2,9 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道（Quest完全対応版）</title>
+<title>AR書道</title>
 <style>
-body{ margin:0; overflow:hidden; }
+body{margin:0;overflow:hidden;}
 </style>
 </head>
 
@@ -16,19 +16,20 @@ import { ARButton } from "https://unpkg.com/three@0.160.0/examples/jsm/webxr/ARB
 
 let scene,camera,renderer;
 let controller0,controller1,rightController=null;
+let gamepad=null;
+
+let brush,brushTip;
 
 let drawing=false;
-let gamepad=null;
+
+const meshes=[];
+const MAX_MESHES=2500;
 
 const STEP_DISTANCE=0.005;
 const MIN_SIZE=0.003;
 const MAX_SIZE=0.03;
 
-const meshes=[]; // ← ここが変更点
-const MAX_MESHES=2000;
-
 let brushColor=new THREE.Color(0x111111);
-let brushTip=null;
 
 const pos=new THREE.Vector3();
 const lastPos=new THREE.Vector3();
@@ -47,14 +48,15 @@ camera=new THREE.PerspectiveCamera(70,window.innerWidth/window.innerHeight,0.01,
 renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
 renderer.setSize(window.innerWidth,window.innerHeight);
 renderer.xr.enabled=true;
-document.body.appendChild(renderer.domElement);
 
+document.body.appendChild(renderer.domElement);
 document.body.appendChild(ARButton.createButton(renderer,{requiredFeatures:["local-floor"]}));
 
 scene.add(new THREE.HemisphereLight(0xffffff,0xbbbbff,1));
 
 controller0=renderer.xr.getController(0);
 controller1=renderer.xr.getController(1);
+
 scene.add(controller0);
 scene.add(controller1);
 
@@ -81,7 +83,10 @@ attachBrush();
 
 function attachBrush(){
 
-const brush=new THREE.Group();
+controller0.clear();
+controller1.clear();
+
+brush=new THREE.Group();
 
 const stick=new THREE.Mesh(
 new THREE.CylinderGeometry(0.01,0.01,0.25,6),
@@ -102,6 +107,15 @@ brush.add(stick);
 brush.add(brushTip);
 
 rightController.add(brush);
+
+}
+
+function updateBrushTransform(){
+
+if(!rightController || !brush) return;
+
+// ★ 書きやすい角度に固定
+brush.rotation.set(-Math.PI/3,0,Math.PI/2);
 
 }
 
@@ -127,6 +141,7 @@ function trigger(){
 
 if(!gamepad) return 0;
 return gamepad.buttons[0].value;
+
 }
 
 function draw(){
@@ -165,9 +180,7 @@ scene.remove(old);
 
 const mesh=new THREE.Mesh(
 new THREE.SphereGeometry(size,6,6),
-new THREE.MeshStandardMaterial({
-color:brushColor
-})
+new THREE.MeshStandardMaterial({color:brushColor})
 );
 
 mesh.position.copy(position);
@@ -177,12 +190,35 @@ meshes.push(mesh);
 
 }
 
+function clearAll(){
+
+meshes.forEach(m=>scene.remove(m));
+meshes.length=0;
+
+hasLast=false;
+
+}
+
+function checkButtons(){
+
+if(!gamepad) return;
+
+// ★ Aボタン（index 4）でリセット
+if(gamepad.buttons.length>4){
+if(gamepad.buttons[4].pressed){
+clearAll();
+}
+}
+
+}
+
 function animate(){
 renderer.setAnimationLoop(render);
 }
 
 function render(){
 
+updateBrushTransform();
 updateColor();
 
 if(!rightController){
@@ -202,6 +238,8 @@ draw();
 }else{
 drawing=false;
 }
+
+checkButtons();
 
 renderer.render(scene,camera);
 
