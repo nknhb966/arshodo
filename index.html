@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道</title>
+<title>AR書道 Ultimate Stable</title>
 <style>
 body{margin:0;overflow:hidden;}
 </style>
@@ -24,7 +24,7 @@ const STEP_DISTANCE=0.004;
 const MIN_SIZE=0.001;
 const MAX_SIZE=0.035;
 
-const MAX_STAMPS=6000;
+const MAX_STAMPS=7000;
 
 let instancedMesh;
 let stampIndex=0;
@@ -43,7 +43,7 @@ let lastSize=0.01;
 let fadeOutCount=0;
 const FADE_STEPS=8;
 
-// 色用
+// 色
 const colorArray=new Float32Array(MAX_STAMPS*3);
 
 init();
@@ -138,7 +138,7 @@ instancedMesh=new THREE.InstancedMesh(geo,mat,MAX_STAMPS);
 instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 instancedMesh.frustumCulled=false;
 
-// ★ 色バッファ
+// 色
 instancedMesh.instanceColor=new THREE.InstancedBufferAttribute(colorArray,3);
 
 scene.add(instancedMesh);
@@ -156,30 +156,28 @@ if(!gamepad) return 0;
 return gamepad.buttons[0].value;
 }
 
+// ★ 安全な色変更（360°）
 function updateColor(){
 
 if(!gamepad) return;
 
-// ★ 安全に取得
-let x = 0;
-let y = 0;
+let x=0,y=0;
 
-if(gamepad.axes.length >= 4){
-x = gamepad.axes[2];
-y = gamepad.axes[3];
-}else if(gamepad.axes.length >= 2){
-x = gamepad.axes[0];
-y = gamepad.axes[1];
+if(gamepad.axes.length>=4){
+x=gamepad.axes[2];
+y=gamepad.axes[3];
+}else if(gamepad.axes.length>=2){
+x=gamepad.axes[0];
+y=gamepad.axes[1];
 }
 
 // デッドゾーン
-if(Math.abs(x) < 0.2 && Math.abs(y) < 0.2) return;
+if(Math.abs(x)<0.2 && Math.abs(y)<0.2) return;
 
-// 角度→色
-const angle = Math.atan2(y, x);
-const hue = (angle + Math.PI) / (Math.PI * 2);
+const angle=Math.atan2(y,x);
+const hue=(angle+Math.PI)/(Math.PI*2);
 
-brushColor.setHSL(hue, 1, 0.5);
+brushColor.setHSL(hue,1,0.5);
 
 }
 
@@ -223,20 +221,21 @@ hasLast=true;
 
 }
 
+// ★ リングバッファ（止まらない）
 function stamp(position,size){
 
-if(stampIndex>=MAX_STAMPS) return;
+const index = stampIndex % MAX_STAMPS;
 
 dummy.position.copy(position);
 dummy.scale.set(size,size*0.6,size);
 dummy.updateMatrix();
 
-instancedMesh.setMatrixAt(stampIndex,dummy.matrix);
+instancedMesh.setMatrixAt(index,dummy.matrix);
 
-// ★ 色セット
-colorArray[stampIndex*3+0]=brushColor.r;
-colorArray[stampIndex*3+1]=brushColor.g;
-colorArray[stampIndex*3+2]=brushColor.b;
+// 色
+colorArray[index*3+0]=brushColor.r;
+colorArray[index*3+1]=brushColor.g;
+colorArray[index*3+2]=brushColor.b;
 
 stampIndex++;
 
@@ -257,7 +256,6 @@ function clearAll(){
 
 stampIndex=0;
 instancedMesh.count=0;
-
 hasLast=false;
 
 }
@@ -316,8 +314,8 @@ fadeOut();
 
 checkButtons();
 
-// ★ 毎フレ更新（重要）
-instancedMesh.count=stampIndex;
+// ★ 毎フレ更新
+instancedMesh.count=Math.min(stampIndex,MAX_STAMPS);
 instancedMesh.instanceMatrix.needsUpdate=true;
 instancedMesh.instanceColor.needsUpdate=true;
 
