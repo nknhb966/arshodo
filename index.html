@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道 Color Wheel</title>
+<title>AR書道</title>
 <style>
 body{margin:0;overflow:hidden;}
 </style>
@@ -240,8 +240,11 @@ return;
 
 colorWheel.visible=true;
 
-const angle=Math.atan2(y,x);
-const hue=(angle+Math.PI/2)/(Math.PI*2);
+let angle = Math.atan2(y, x);
+angle -= Math.PI / 2;
+if(angle < 0) angle += Math.PI * 2;
+
+const hue=(angle+Math.PI)/(Math.PI*2);
 
 brushColor.setHSL(hue,1,0.5);
 
