@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道</title>
+<title>AR書道（なめらか最適化版）</title>
 <style>
 body{margin:0;overflow:hidden;}
 </style>
@@ -23,11 +23,14 @@ let brush,brushTip;
 let drawing=false;
 
 const meshes=[];
-const MAX_MESHES=5500;
+const MAX_MESHES=2500;
 
-const STEP_DISTANCE=0.005;
-const MIN_SIZE=0.003;
+// ★ なめらか設定
+const STEP_DISTANCE=0.003;
+const MIN_SIZE=0.004;
 const MAX_SIZE=0.03;
+
+let lastSize=0.01;
 
 let brushColor=new THREE.Color(0x111111);
 
@@ -112,8 +115,9 @@ rightController.add(brush);
 
 function updateBrushTransform(){
 
-if(!rightController || !brush) return;
+if(!brush) return;
 
+// 書きやすい角度固定
 brush.rotation.set(-Math.PI/3,0,Math.PI/2);
 
 }
@@ -137,10 +141,8 @@ brushTip.material.color.copy(brushColor);
 }
 
 function trigger(){
-
 if(!gamepad) return 0;
 return gamepad.buttons[0].value;
-
 }
 
 function draw(){
@@ -150,14 +152,20 @@ pos.setFromMatrixPosition(rightController.matrixWorld);
 if(hasLast){
 
 const dist=pos.distanceTo(lastPos);
-const steps=Math.max(1,Math.floor(dist/STEP_DISTANCE));
+
+// ★ 最低2ステップ保証
+const steps=Math.max(2,Math.floor(dist/STEP_DISTANCE));
 
 for(let i=1;i<=steps;i++){
 
 const t=i/steps;
 interp.lerpVectors(lastPos,pos,t);
 
-const size=THREE.MathUtils.lerp(MIN_SIZE,MAX_SIZE,trigger());
+const targetSize=THREE.MathUtils.lerp(MIN_SIZE,MAX_SIZE,trigger());
+
+// ★ サイズスムージング
+const size=THREE.MathUtils.lerp(lastSize,targetSize,0.3);
+lastSize=size;
 
 stamp(interp,size);
 
@@ -178,9 +186,12 @@ scene.remove(old);
 }
 
 const mesh=new THREE.Mesh(
-new THREE.SphereGeometry(size,8,8),
+new THREE.SphereGeometry(size,6,6),
 new THREE.MeshStandardMaterial({color:brushColor})
 );
+
+// ★ 少し潰して筆っぽく
+mesh.scale.set(1,0.6,1);
 
 mesh.position.copy(position);
 
@@ -202,23 +213,19 @@ function checkButtons(){
 
 if(!gamepad) return;
 
-// Aボタン：リセット
+// Aボタン（リセット）
 if(gamepad.buttons.length>4){
 if(gamepad.buttons[4].pressed){
 clearAll();
 }
 }
 
-// ★ Bボタン：黒に戻す
+// Bボタン（黒）
 if(gamepad.buttons.length>5){
 if(gamepad.buttons[5].pressed){
 
 brushColor.set(0x111111);
-
-// 筆先の色も更新
-if(brushTip){
 brushTip.material.color.set(0x111111);
-}
 
 }
 }
