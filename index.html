@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道</title>
+<title>AR書道（右手完全固定）</title>
 
 <style>
 body{
@@ -21,9 +21,8 @@ import { ARButton } from "https://unpkg.com/three@0.160.0/examples/jsm/webxr/ARB
 
 let scene,camera,renderer;
 
-// ★ 2本持ち
 let controller0,controller1;
-let activeController=null;
+let rightController=null;
 
 let drawing=false;
 
@@ -78,21 +77,19 @@ requiredFeatures:["local-floor"]
 );
 }
 
-renderer.xr.addEventListener("sessionstart",onSessionStart);
-
 const light=new THREE.HemisphereLight(0xffffff,0xbbbbff,1);
 scene.add(light);
 
-// ★ controller2本
+// controller2本
 controller0 = renderer.xr.getController(0);
 controller1 = renderer.xr.getController(1);
 
 scene.add(controller0);
 scene.add(controller1);
 
-// ★ 両方に筆を付ける（あとで片方消す）
-createBrush(controller0);
-createBrush(controller1);
+// ★ ここが最重要
+controller0.addEventListener("connected", onConnected);
+controller1.addEventListener("connected", onConnected);
 
 createInkSystem();
 
@@ -100,52 +97,34 @@ window.addEventListener("resize",resize);
 
 }
 
-function onSessionStart(){
+function onConnected(event){
 
-const session = renderer.xr.getSession();
-session.addEventListener("inputsourceschange",updateInputSource);
-updateInputSource();
+const data = event.data;
 
-}
+// 右手だけ採用
+if(data.handedness === "right"){
 
-function updateInputSource(){
+rightController = event.target;
+gamepad = data.gamepad || null;
 
-const session = renderer.xr.getSession();
-if(!session) return;
+// 左は消す
+controller0.visible = (rightController === controller0);
+controller1.visible = (rightController === controller1);
 
-activeController=null;
-gamepad=null;
-
-// 一旦両方表示
-controller0.visible = true;
-controller1.visible = true;
-
-for(const source of session.inputSources){
-
-if(source.handedness === "right"){
-
-const index = session.inputSources.indexOf(source);
-
-if(index===0) activeController = controller0;
-if(index===1) activeController = controller1;
-
-gamepad = source.gamepad || null;
+// 筆を付ける
+attachBrush();
 
 }
 
 }
 
-// ★ 右以外を無効化
-if(activeController === controller0){
-controller1.visible = false;
-}
-if(activeController === controller1){
-controller0.visible = false;
-}
+function attachBrush(){
 
-}
+if(!rightController) return;
 
-function createBrush(target){
+// 念のため消す
+controller0.clear();
+controller1.clear();
 
 const brush=new THREE.Group();
 
@@ -171,7 +150,8 @@ brush.rotation.x=-Math.PI/3;
 brush.add(stick);
 brush.add(tip);
 
-target.add(brush);
+// ★ 右手だけ
+rightController.add(brush);
 
 }
 
@@ -195,6 +175,7 @@ instancedMesh.frustumCulled=false;
 
 scene.add(instancedMesh);
 
+// 初期化
 dummy.position.set(0,0,-1000);
 dummy.scale.set(0,0,0);
 dummy.updateMatrix();
@@ -219,9 +200,9 @@ return 0;
 
 function draw(){
 
-if(!activeController) return;
+if(!rightController) return;
 
-pos.setFromMatrixPosition(activeController.matrixWorld);
+pos.setFromMatrixPosition(rightController.matrixWorld);
 
 if(hasLast){
 
@@ -231,6 +212,7 @@ const steps=Math.max(1,Math.floor(dist/STEP_DISTANCE));
 for(let i=1;i<=steps;i++){
 
 const t=i/steps;
+
 interp.lerpVectors(lastPos,pos,t);
 
 const trigger=getTriggerValue();
@@ -303,7 +285,7 @@ renderer.setAnimationLoop(render);
 
 function render(){
 
-if(!activeController){
+if(!rightController){
 renderer.render(scene,camera);
 return;
 }
