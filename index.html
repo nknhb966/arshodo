@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>VR InstancedMesh 色テスト</title>
+<title>VR InstancedMesh 色描画テスト</title>
 <style>
 body{margin:0;overflow:hidden;}
 canvas{display:block;}
@@ -10,7 +10,6 @@ canvas{display:block;}
 </head>
 <body>
 <script type="module">
-
 import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
 import { ARButton } from "https://unpkg.com/three@0.160.0/examples/jsm/webxr/ARButton.js";
 
@@ -24,14 +23,12 @@ let stampIndex = 0;
 
 let instancedMesh;
 const dummy = new THREE.Object3D();
-
 let brushColor = new THREE.Color(0xff0000);
 
 init();
 animate();
 
 function init(){
-
     scene = new THREE.Scene();
 
     camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.01, 10);
@@ -41,16 +38,15 @@ function init(){
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.xr.enabled = true;
     document.body.appendChild(renderer.domElement);
-    document.body.appendChild(ARButton.createButton(renderer,{requiredFeatures:["local-floor"]}));
+    document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures:["local-floor"] }));
 
-    // コントローラー
     controller0 = renderer.xr.getController(0);
     controller1 = renderer.xr.getController(1);
     scene.add(controller0, controller1);
     controller0.addEventListener("connected", onConnected);
     controller1.addEventListener("connected", onConnected);
 
-    // -------------------- InstancedMesh 作成 --------------------
+    // InstancedMesh
     const geo = new THREE.SphereGeometry(0.02, 16, 16);
     const mat = new THREE.MeshBasicMaterial({ vertexColors: true });
     instancedMesh = new THREE.InstancedMesh(geo, mat, MAX_STAMPS);
@@ -64,6 +60,7 @@ function init(){
 function onConnected(e){
     if(e.data.handedness === "right"){
         rightController = e.target;
+        console.log("Right controller connected");
     }
 }
 
@@ -71,11 +68,18 @@ function updateGamepad(){
     const session = renderer.xr.getSession();
     if(!session) return;
 
+    gamepad = null;
     for(const source of session.inputSources){
-        if(source.handedness==="right" && source.gamepad){
+        if(source.handedness === "right" && source.gamepad){
             gamepad = source.gamepad;
-            return;
+            // マトリックス取得用に rightController 更新
+            rightController = (source === session.inputSources[0]) ? controller0 : controller1;
+            break;
         }
+    }
+    if(gamepad){
+        // デバッグ用：トリガーや軸を確認
+        // console.log("Gamepad:", gamepad.buttons.map(b=>b.value), "axes:", gamepad.axes);
     }
 }
 
@@ -98,16 +102,14 @@ function updateColor(){
 
     const len = Math.hypot(x, y);
     if(len>0.2){
-        const angle = Math.atan2(y, x);
-        const hue = (angle + Math.PI)/(Math.PI*2);
-        brushColor.setHSL(hue,1,0.5);
+        let angle = Math.atan2(y, x);
+        if(angle<0) angle += Math.PI*2;
+        brushColor.setHSL(angle/(Math.PI*2),1,0.5);
     }
 }
 
-// 右手コントローラーの位置にスタンプ
 function draw(){
     if(!rightController) return;
-
     const pos = new THREE.Vector3();
     pos.setFromMatrixPosition(rightController.matrixWorld);
 
