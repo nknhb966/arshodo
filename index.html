@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道</title>
+<title>AR書道s</title>
 <style>
 body{margin:0;overflow:hidden;}
 </style>
@@ -223,7 +223,7 @@ function updateColor(){
 
     const len=Math.hypot(x,y);
 
-    // 非表示条件
+    // ホイール表示/非表示
     if(len<0.15 || getTrigger()>0.05){
         colorWheel.visible=false;
     }else{
@@ -244,7 +244,7 @@ function updateColor(){
         );
         colorPointer.material.color.copy(brushColor);
 
-        // ★ ここで筆先の色も更新
+        // 筆先も更新
         if(tipMesh){
             tipMesh.material.color.copy(brushColor);
         }
