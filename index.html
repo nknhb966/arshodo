@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道（カラー完全版）</title>
+<title>AR書道（最終安定版）</title>
 
 <style>
 body{
@@ -110,11 +110,9 @@ if(data.handedness === "right"){
 rightController = event.target;
 gamepad = data.gamepad || null;
 
-// 左手は非表示
 controller0.visible = (rightController === controller0);
 controller1.visible = (rightController === controller1);
 
-// 筆を付ける
 attachBrush();
 
 }
@@ -174,24 +172,21 @@ MAX_STAMPS
 instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 instancedMesh.frustumCulled=false;
 
-// ★ 色バッファ
-const colors = new Float32Array(MAX_STAMPS * 3);
-instancedMesh.instanceColor = new THREE.InstancedBufferAttribute(colors, 3);
-
 scene.add(instancedMesh);
 
-// 初期化（ダミー）
+// ★ ダミー初期化（ここが重要）
 dummy.position.set(0,0,-1000);
 dummy.scale.set(0,0,0);
 dummy.updateMatrix();
 
 instancedMesh.setMatrixAt(0,dummy.matrix);
+
+// ★ これで内部colorバッファ生成
 instancedMesh.setColorAt(0,new THREE.Color(0x000000));
 
 instancedMesh.count=1;
 
 instancedMesh.instanceMatrix.needsUpdate=true;
-instancedMesh.instanceColor.needsUpdate=true;
 
 }
 
@@ -205,19 +200,14 @@ const y = gamepad.axes[3];
 const dead = 0.2;
 if(Math.abs(x) < dead && Math.abs(y) < dead) return;
 
-// 色相
 let angle = Math.atan2(y, x);
 let hue = (angle + Math.PI) / (Math.PI * 2);
 
-// 彩度
 let saturation = Math.min(1, Math.sqrt(x*x + y*y));
-
-// 明度
 let lightness = 0.4 + (y * 0.3);
 
 brushColor.setHSL(hue, saturation, lightness);
 
-// 筆先にも反映
 if(brushTip){
 brushTip.material.color.copy(brushColor);
 }
@@ -290,12 +280,15 @@ dummy.updateMatrix();
 
 instancedMesh.setMatrixAt(stampIndex,dummy.matrix);
 
-// ★ 色設定
+// ★ 色設定（これが効くようになる）
 instancedMesh.setColorAt(stampIndex, brushColor);
 
 stampIndex++;
 
+// ★ GPU反映
+if(instancedMesh.instanceColor){
 instancedMesh.instanceColor.needsUpdate = true;
+}
 
 inkUpdated=true;
 
@@ -306,7 +299,11 @@ function clearAll(){
 stampIndex=0;
 instancedMesh.count=0;
 instancedMesh.instanceMatrix.needsUpdate=true;
+
+if(instancedMesh.instanceColor){
 instancedMesh.instanceColor.needsUpdate=true;
+}
+
 hasLast=false;
 
 }
@@ -354,7 +351,11 @@ drawing=false;
 if(inkUpdated){
 instancedMesh.count=stampIndex;
 instancedMesh.instanceMatrix.needsUpdate=true;
+
+if(instancedMesh.instanceColor){
 instancedMesh.instanceColor.needsUpdate=true;
+}
+
 inkUpdated=false;
 }
 
