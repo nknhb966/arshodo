@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道（青色固定・将来変化対応）</title>
+<title>AR書道（InstancedMesh 色対応）</title>
 <style>
 body{margin:0;overflow:hidden;}
 </style>
@@ -53,10 +53,8 @@ function init(){
     document.body.appendChild(renderer.domElement);
     document.body.appendChild(ARButton.createButton(renderer, {requiredFeatures:["local-floor"]}));
     
-    // 照明
     scene.add(new THREE.HemisphereLight(0xffffff,0xbbbbff,1));
 
-    // コントローラー
     controller0 = renderer.xr.getController(0);
     controller1 = renderer.xr.getController(1);
     scene.add(controller0);
@@ -104,7 +102,36 @@ function attachBrush(){
 
 function createInkSystem(){
     const geo = new THREE.SphereGeometry(1,6,6);
-    const mat = new THREE.MeshBasicMaterial({vertexColors:true});
+
+    // カスタムシェーダー対応マテリアル
+    const mat = new THREE.MeshBasicMaterial();
+    mat.onBeforeCompile = shader => {
+
+        shader.vertexShader = `
+            attribute vec3 instanceColor;
+            varying vec3 vInstanceColor;
+        ` + shader.vertexShader;
+
+        shader.vertexShader = shader.vertexShader.replace(
+            `#include <begin_vertex>`,
+            `
+            #include <begin_vertex>
+            vInstanceColor = instanceColor;
+            `
+        );
+
+        shader.fragmentShader = `
+            varying vec3 vInstanceColor;
+        ` + shader.fragmentShader;
+
+        shader.fragmentShader = shader.fragmentShader.replace(
+            `vec4 diffuseColor = vec4( diffuse, opacity );`,
+            `vec4 diffuseColor = vec4(vInstanceColor, opacity );`
+        );
+
+        shader.attributes.instanceColor = instancedMesh.instanceColor;
+    };
+
     instancedMesh = new THREE.InstancedMesh(geo, mat, MAX_STAMPS);
     instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     instancedMesh.frustumCulled = false;
@@ -161,10 +188,10 @@ function stamp(position, size, color=[0,0,1]){
     dummy.updateMatrix();
     instancedMesh.setMatrixAt(index, dummy.matrix);
 
-    // 色を設定（青固定。将来変更可能）
-    colorArray[index*3+0] = color[0]; // R
-    colorArray[index*3+1] = color[1]; // G
-    colorArray[index*3+2] = color[2]; // B
+    // 色を設定（0〜1）
+    colorArray[index*3+0] = color[0];
+    colorArray[index*3+1] = color[1];
+    colorArray[index*3+2] = color[2];
 
     stampIndex++;
     instancedMesh.count = Math.min(stampIndex, MAX_STAMPS);
