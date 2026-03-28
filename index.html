@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道</title>
+<title>AR書道 Color Wheel</title>
 <style>
 body{margin:0;overflow:hidden;}
 </style>
@@ -23,7 +23,6 @@ let drawing=false;
 const STEP_DISTANCE=0.004;
 const MIN_SIZE=0.001;
 const MAX_SIZE=0.035;
-
 const MAX_STAMPS=7000;
 
 let instancedMesh;
@@ -43,6 +42,10 @@ let fadeOutCount=0;
 const FADE_STEPS=8;
 
 const colorArray=new Float32Array(MAX_STAMPS*3);
+
+// ★ 色ホイール
+let colorWheel;
+let colorPointer;
 
 init();
 animate();
@@ -113,7 +116,57 @@ brush.add(tip);
 
 brush.rotation.set(-Math.PI/3,0,Math.PI/2);
 
+// ★ 色ホイール追加
+createColorWheel();
+colorWheel.position.z=-0.08;
+colorWheel.rotation.x=Math.PI/2;
+
+brush.add(colorWheel);
+
 rightController.add(brush);
+
+}
+
+function createColorWheel(){
+
+const radius=0.06;
+const segments=64;
+
+const geometry=new THREE.RingGeometry(radius*0.8,radius,segments);
+
+const colors=[];
+
+for(let i=0;i<=segments;i++){
+
+const t=i/segments;
+const hue=t;
+
+const c=new THREE.Color();
+c.setHSL(hue,1,0.5);
+
+colors.push(c.r,c.g,c.b);
+colors.push(c.r,c.g,c.b);
+
+}
+
+geometry.setAttribute("color",new THREE.Float32BufferAttribute(colors,3));
+
+const material=new THREE.MeshBasicMaterial({
+vertexColors:true,
+side:THREE.DoubleSide,
+transparent:true,
+opacity:0.7
+});
+
+colorWheel=new THREE.Mesh(geometry,material);
+
+// ポインタ
+colorPointer=new THREE.Mesh(
+new THREE.SphereGeometry(0.008,8,8),
+new THREE.MeshBasicMaterial({color:0xffffff})
+);
+
+colorWheel.add(colorPointer);
 
 }
 
@@ -142,15 +195,15 @@ instancedMesh.count=1;
 
 }
 
-// ★ 毎フレーム右手gamepad取得（最重要）
+// ★ 毎フレーム右手gamepad取得
 function updateGamepad(){
 
-const session = renderer.xr.getSession();
+const session=renderer.xr.getSession();
 if(!session) return;
 
 for(const source of session.inputSources){
 if(source.handedness==="right" && source.gamepad){
-gamepad = source.gamepad;
+gamepad=source.gamepad;
 return;
 }
 }
@@ -159,17 +212,16 @@ return;
 
 function getTrigger(){
 if(!gamepad) return 0;
-return gamepad.buttons[0]?.value || 0;
+return gamepad.buttons[0]?.value||0;
 }
 
-// ★ 確実に動く色変更
+// ★ 色更新＋UI
 function updateColor(){
 
 if(!gamepad) return;
 
 let x=0,y=0;
 
-// 安全取得
 if(gamepad.axes.length>=4){
 x=gamepad.axes[2];
 y=gamepad.axes[3];
@@ -178,14 +230,31 @@ x=gamepad.axes[0];
 y=gamepad.axes[1];
 }
 
-// デッドゾーン
-if(Math.abs(x)<0.15 && Math.abs(y)<0.15) return;
+const len=Math.hypot(x,y);
 
-// 色変換
+// 非表示条件
+if(len<0.15 || getTrigger()>0.05){
+colorWheel.visible=false;
+return;
+}
+
+colorWheel.visible=true;
+
 const angle=Math.atan2(y,x);
 const hue=(angle+Math.PI)/(Math.PI*2);
 
 brushColor.setHSL(hue,1,0.5);
+
+// ポインタ位置
+const r=0.055;
+
+colorPointer.position.set(
+Math.cos(angle)*r,
+Math.sin(angle)*r,
+0
+);
+
+colorPointer.material.color.copy(brushColor);
 
 }
 
@@ -225,10 +294,10 @@ hasLast=true;
 
 }
 
-// ★ 止まらないリングバッファ
+// リングバッファ
 function stamp(position,size){
 
-const index = stampIndex % MAX_STAMPS;
+const index=stampIndex%MAX_STAMPS;
 
 dummy.position.copy(position);
 dummy.scale.set(size,size*0.6,size);
@@ -283,7 +352,7 @@ renderer.setAnimationLoop(render);
 
 function render(){
 
-updateGamepad(); // ★これが超重要
+updateGamepad();
 updateColor();
 
 if(!rightController){
