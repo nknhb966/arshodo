@@ -82,12 +82,10 @@ window.addEventListener("resize",resize);
 }
 
 function onConnected(e){
-
 if(e.data.handedness==="right"){
 rightController=e.target;
 attachBrush();
 }
-
 }
 
 function attachBrush(){
@@ -102,20 +100,19 @@ new THREE.CylinderGeometry(0.01,0.01,0.25,6),
 new THREE.MeshStandardMaterial({color:0x884400})
 );
 
-const tip=new THREE.Mesh(
+// ★ グローバル化した筆先
+tipMesh=new THREE.Mesh(
 new THREE.ConeGeometry(0.015,0.05,6),
 new THREE.MeshStandardMaterial({color:0x111111})
 );
 
-tipMesh = tip;
-
 stick.rotation.x=Math.PI/2;
-tip.rotation.x=-Math.PI/2;
+tipMesh.rotation.x=-Math.PI/2;
 
 stick.position.z=0.15;
 
 brush.add(stick);
-brush.add(tip);
+brush.add(tipMesh);
 
 brush.rotation.set(-Math.PI/3,0,Math.PI/2);
 
@@ -191,6 +188,7 @@ scene.add(instancedMesh);
 
 }
 
+// gamepad取得
 function updateGamepad(){
 
 const session=renderer.xr.getSession();
@@ -210,6 +208,7 @@ if(!gamepad) return 0;
 return gamepad.buttons[0]?.value||0;
 }
 
+// 色更新
 function updateColor(){
 
 if(!gamepad) return;
@@ -219,7 +218,7 @@ let x=0,y=0;
 if(gamepad.axes.length>=4){
 x=gamepad.axes[2];
 y=gamepad.axes[3];
-}else if(gamepad.axes.length>=2){
+}else{
 x=gamepad.axes[0];
 y=gamepad.axes[1];
 }
@@ -233,17 +232,15 @@ return;
 
 colorWheel.visible=true;
 
-let angle = Math.atan2(y, x);
-angle += Math.PI / 2;
-if(angle < 0) angle += Math.PI * 2;
+let angle=Math.atan2(y,x);
+angle+=Math.PI/2;
+if(angle<0) angle+=Math.PI*2;
 
-const hue=(angle)/(Math.PI*2);
-
+const hue=(angle+Math.PI)/(Math.PI*2);
 brushColor.setHSL(hue,1,0.5);
 
-// ポインタ位置
+// ポインタ
 const r=0.055;
-
 colorPointer.position.set(
 Math.cos(angle)*r,
 Math.sin(angle)*r,
@@ -259,6 +256,7 @@ tipMesh.material.color.copy(brushColor);
 
 }
 
+// 描画
 function draw(){
 
 pos.setFromMatrixPosition(rightController.matrixWorld);
@@ -274,9 +272,7 @@ const t=i/steps;
 interp.lerpVectors(lastPos,pos,t);
 
 const pressure=getTrigger();
-
-const speed=dist;
-const speedFactor=THREE.MathUtils.clamp(1.0-speed*20.0,0.2,1.0);
+const speedFactor=THREE.MathUtils.clamp(1.0-dist*20.0,0.2,1.0);
 
 let targetSize=MAX_SIZE*pressure*speedFactor;
 targetSize=Math.max(targetSize,MIN_SIZE);
@@ -305,7 +301,7 @@ dummy.updateMatrix();
 
 instancedMesh.setMatrixAt(index,dummy.matrix);
 
-// ★ ここが重要（色反映）
+// ★ 正しい色設定
 instancedMesh.setColorAt(index, brushColor);
 
 stampIndex++;
@@ -324,11 +320,9 @@ fadeOutCount--;
 }
 
 function clearAll(){
-
 stampIndex=0;
 instancedMesh.count=0;
 hasLast=false;
-
 }
 
 function checkButtons(){
@@ -386,7 +380,7 @@ checkButtons();
 
 instancedMesh.count=Math.min(stampIndex,MAX_STAMPS);
 instancedMesh.instanceMatrix.needsUpdate=true;
-instancedMesh.instanceColor.needsUpdate=true;
+instancedMesh.instanceColor && (instancedMesh.instanceColor.needsUpdate=true);
 
 renderer.render(scene,camera);
 
