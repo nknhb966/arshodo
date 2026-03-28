@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道</title>
+<title>AR書道（右手専用・安定版）</title>
 
 <style>
 body{
@@ -19,15 +19,17 @@ overflow:hidden;
 import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
 import { ARButton } from "https://unpkg.com/three@0.160.0/examples/jsm/webxr/ARButton.js";
 
-let scene,camera,renderer,controller;
+let scene,camera,renderer;
+
+// ★ コントローラー2本持ち
+let controller0,controller1;
+let rightController=null;
 
 let drawing=false;
 
 const STEP_DISTANCE=0.005;
-
 const MIN_SIZE=0.001;
 const MAX_SIZE=0.030;
-
 const MAX_STAMPS=8000;
 
 let instancedMesh;
@@ -83,11 +85,13 @@ renderer.xr.addEventListener("sessionstart",onSessionStart);
 const light=new THREE.HemisphereLight(0xffffff,0xbbbbff,1);
 scene.add(light);
 
-// ★ controllerは仮で作る（あとで右手に差し替え）
-controller=new THREE.Group();
-scene.add(controller);
+// ★ controllerを2本取得
+controller0 = renderer.xr.getController(0);
+controller1 = renderer.xr.getController(1);
 
-createBrush();
+scene.add(controller0);
+scene.add(controller1);
+
 createInkSystem();
 
 window.addEventListener("resize",resize);
@@ -109,44 +113,41 @@ function updateInputSource(){
 const session = renderer.xr.getSession();
 if(!session) return;
 
-let rightSource=null;
+rightController = null;
+gamepad = null;
 
-// ★ 右手のみ取得
+// ★ 右手を探す
 for(const source of session.inputSources){
-if(source.handedness==="right"){
-rightSource=source;
+
+if(source.handedness === "right"){
+
+// index取得
+const index = session.inputSources.indexOf(source);
+
+// controllerを特定
+if(index === 0) rightController = controller0;
+if(index === 1) rightController = controller1;
+
+gamepad = source.gamepad || null;
+
 break;
-}
-}
-
-// 左は完全無視
-if(!rightSource){
-gamepad=null;
-return;
-}
-
-// ★ controllerを右手に差し替え
-const index = session.inputSources.indexOf(rightSource);
-const newController = renderer.xr.getController(index);
-
-// 既存を削除
-scene.remove(controller);
-controller = newController;
-scene.add(controller);
-
-// 筆を再アタッチ
-createBrush();
-
-gamepad = rightSource.gamepad || null;
 
 }
 
-function createBrush(){
-
-// すでに筆があれば削除（再生成用）
-if(controller.children.length>0){
-controller.clear();
 }
+
+// ★ 筆を右手に付ける
+attachBrush();
+
+}
+
+function attachBrush(){
+
+// 一旦全部削除（左右両方）
+controller0.clear();
+controller1.clear();
+
+if(!rightController) return;
 
 const brush=new THREE.Group();
 
@@ -172,7 +173,8 @@ brush.rotation.x=-Math.PI/3;
 brush.add(stick);
 brush.add(tip);
 
-controller.add(brush);
+// ★ 右手にだけ装着
+rightController.add(brush);
 
 }
 
@@ -221,7 +223,9 @@ return 0;
 
 function draw(){
 
-pos.setFromMatrixPosition(controller.matrixWorld);
+if(!rightController) return;
+
+pos.setFromMatrixPosition(rightController.matrixWorld);
 
 if(hasLast){
 
@@ -309,6 +313,12 @@ renderer.setAnimationLoop(render);
 }
 
 function render(){
+
+// ★ 右手が無い場合は何もしない
+if(!rightController){
+renderer.render(scene,camera);
+return;
+}
 
 const trigger=getTriggerValue();
 
