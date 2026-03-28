@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道 Ultimate Stable</title>
+<title>AR書道</title>
 <style>
 body{margin:0;overflow:hidden;}
 </style>
@@ -39,11 +39,9 @@ const interp=new THREE.Vector3();
 let hasLast=false;
 let lastSize=0.01;
 
-// 抜き
 let fadeOutCount=0;
 const FADE_STEPS=8;
 
-// 色
 const colorArray=new Float32Array(MAX_STAMPS*3);
 
 init();
@@ -83,11 +81,6 @@ function onConnected(e){
 
 if(e.data.handedness==="right"){
 rightController=e.target;
-gamepad=e.data.gamepad;
-
-controller0.visible=(rightController===controller0);
-controller1.visible=(rightController===controller1);
-
 attachBrush();
 }
 
@@ -138,12 +131,10 @@ instancedMesh=new THREE.InstancedMesh(geo,mat,MAX_STAMPS);
 instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 instancedMesh.frustumCulled=false;
 
-// 色
 instancedMesh.instanceColor=new THREE.InstancedBufferAttribute(colorArray,3);
 
 scene.add(instancedMesh);
 
-// 初期化
 dummy.scale.set(0,0,0);
 dummy.updateMatrix();
 instancedMesh.setMatrixAt(0,dummy.matrix);
@@ -151,18 +142,34 @@ instancedMesh.count=1;
 
 }
 
-function getTrigger(){
-if(!gamepad) return 0;
-return gamepad.buttons[0].value;
+// ★ 毎フレーム右手gamepad取得（最重要）
+function updateGamepad(){
+
+const session = renderer.xr.getSession();
+if(!session) return;
+
+for(const source of session.inputSources){
+if(source.handedness==="right" && source.gamepad){
+gamepad = source.gamepad;
+return;
+}
 }
 
-// ★ 安全な色変更（360°）
+}
+
+function getTrigger(){
+if(!gamepad) return 0;
+return gamepad.buttons[0]?.value || 0;
+}
+
+// ★ 確実に動く色変更
 function updateColor(){
 
 if(!gamepad) return;
 
 let x=0,y=0;
 
+// 安全取得
 if(gamepad.axes.length>=4){
 x=gamepad.axes[2];
 y=gamepad.axes[3];
@@ -172,8 +179,9 @@ y=gamepad.axes[1];
 }
 
 // デッドゾーン
-if(Math.abs(x)<0.2 && Math.abs(y)<0.2) return;
+if(Math.abs(x)<0.15 && Math.abs(y)<0.15) return;
 
+// 色変換
 const angle=Math.atan2(y,x);
 const hue=(angle+Math.PI)/(Math.PI*2);
 
@@ -197,16 +205,12 @@ interp.lerpVectors(lastPos,pos,t);
 
 const pressure=getTrigger();
 
-// 速度
 const speed=dist;
-
-// 速度で細く
 const speedFactor=THREE.MathUtils.clamp(1.0-speed*20.0,0.2,1.0);
 
 let targetSize=MAX_SIZE*pressure*speedFactor;
 targetSize=Math.max(targetSize,MIN_SIZE);
 
-// スムーズ
 const size=THREE.MathUtils.lerp(lastSize,targetSize,0.25);
 lastSize=size;
 
@@ -221,7 +225,7 @@ hasLast=true;
 
 }
 
-// ★ リングバッファ（止まらない）
+// ★ 止まらないリングバッファ
 function stamp(position,size){
 
 const index = stampIndex % MAX_STAMPS;
@@ -232,7 +236,6 @@ dummy.updateMatrix();
 
 instancedMesh.setMatrixAt(index,dummy.matrix);
 
-// 色
 colorArray[index*3+0]=brushColor.r;
 colorArray[index*3+1]=brushColor.g;
 colorArray[index*3+2]=brushColor.b;
@@ -264,12 +267,10 @@ function checkButtons(){
 
 if(!gamepad) return;
 
-// A：リセット
 if(gamepad.buttons[4]?.pressed){
 clearAll();
 }
 
-// B：黒
 if(gamepad.buttons[5]?.pressed){
 brushColor.set(0x111111);
 }
@@ -282,6 +283,7 @@ renderer.setAnimationLoop(render);
 
 function render(){
 
+updateGamepad(); // ★これが超重要
 updateColor();
 
 if(!rightController){
@@ -314,7 +316,6 @@ fadeOut();
 
 checkButtons();
 
-// ★ 毎フレ更新
 instancedMesh.count=Math.min(stampIndex,MAX_STAMPS);
 instancedMesh.instanceMatrix.needsUpdate=true;
 instancedMesh.instanceColor.needsUpdate=true;
