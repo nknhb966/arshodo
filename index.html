@@ -2,48 +2,150 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>Mesh テスト</title>
+<title>VR InstancedMesh 色テスト</title>
 <style>
-body { margin:0; overflow:hidden; }
-canvas { display:block; }
+body{margin:0;overflow:hidden;}
+canvas{display:block;}
 </style>
 </head>
 <body>
 <script type="module">
-import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
 
-let scene, camera, renderer, mesh;
+import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
+import { ARButton } from "https://unpkg.com/three@0.160.0/examples/jsm/webxr/ARButton.js";
+
+let scene, camera, renderer;
+let controller0, controller1, rightController = null;
+let gamepad = null;
+
+const MAX_STAMPS = 500;
+const colorArray = new Float32Array(MAX_STAMPS*3);
+let stampIndex = 0;
+
+let instancedMesh;
+const dummy = new THREE.Object3D();
+
+let brushColor = new THREE.Color(0xff0000);
 
 init();
 animate();
 
-function init() {
+function init(){
+
     scene = new THREE.Scene();
 
     camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.01, 10);
     camera.position.z = 1;
 
-    renderer = new THREE.WebGLRenderer({antialias:true});
+    renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
     renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.xr.enabled = true;
     document.body.appendChild(renderer.domElement);
+    document.body.appendChild(ARButton.createButton(renderer,{requiredFeatures:["local-floor"]}));
 
-    // Mesh 1個で表示確認
-    const geo = new THREE.SphereGeometry(0.1, 32, 32);
-    const mat = new THREE.MeshBasicMaterial({ color: 0xff0000 }); // 赤
-    mesh = new THREE.Mesh(geo, mat);
-    scene.add(mesh);
+    // コントローラー
+    controller0 = renderer.xr.getController(0);
+    controller1 = renderer.xr.getController(1);
+    scene.add(controller0, controller1);
+    controller0.addEventListener("connected", onConnected);
+    controller1.addEventListener("connected", onConnected);
 
-    window.addEventListener("resize", () => {
-        camera.aspect = window.innerWidth/window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-    });
+    // -------------------- InstancedMesh 作成 --------------------
+    const geo = new THREE.SphereGeometry(0.02, 16, 16);
+    const mat = new THREE.MeshBasicMaterial({ vertexColors: true });
+    instancedMesh = new THREE.InstancedMesh(geo, mat, MAX_STAMPS);
+    instancedMesh.frustumCulled = false;
+    instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    scene.add(instancedMesh);
+
+    window.addEventListener("resize", resize);
 }
 
-function animate() {
-    requestAnimationFrame(animate);
+function onConnected(e){
+    if(e.data.handedness === "right"){
+        rightController = e.target;
+    }
+}
+
+function updateGamepad(){
+    const session = renderer.xr.getSession();
+    if(!session) return;
+
+    for(const source of session.inputSources){
+        if(source.handedness==="right" && source.gamepad){
+            gamepad = source.gamepad;
+            return;
+        }
+    }
+}
+
+function getTrigger(){
+    if(!gamepad) return 0;
+    return gamepad.buttons[0]?.value || 0;
+}
+
+function updateColor(){
+    if(!gamepad) return;
+
+    let x=0, y=0;
+    if(gamepad.axes.length>=4){
+        x=gamepad.axes[2];
+        y=gamepad.axes[3];
+    }else if(gamepad.axes.length>=2){
+        x=gamepad.axes[0];
+        y=gamepad.axes[1];
+    }
+
+    const len = Math.hypot(x, y);
+    if(len>0.2){
+        const angle = Math.atan2(y, x);
+        const hue = (angle + Math.PI)/(Math.PI*2);
+        brushColor.setHSL(hue,1,0.5);
+    }
+}
+
+// 右手コントローラーの位置にスタンプ
+function draw(){
+    if(!rightController) return;
+
+    const pos = new THREE.Vector3();
+    pos.setFromMatrixPosition(rightController.matrixWorld);
+
+    const idx = stampIndex % MAX_STAMPS;
+    dummy.position.copy(pos);
+    dummy.updateMatrix();
+    instancedMesh.setMatrixAt(idx, dummy.matrix);
+
+    colorArray[idx*3+0] = brushColor.r;
+    colorArray[idx*3+1] = brushColor.g;
+    colorArray[idx*3+2] = brushColor.b;
+
+    stampIndex++;
+    instancedMesh.instanceMatrix.needsUpdate = true;
+    instancedMesh.instanceColor.needsUpdate = true;
+}
+
+function animate(){
+    renderer.setAnimationLoop(render);
+}
+
+function render(){
+    updateGamepad();
+    updateColor();
+
+    if(getTrigger() > 0.05){
+        draw();
+    }
+
     renderer.render(scene, camera);
 }
+
+function resize(){
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
 </script>
 </body>
 </html>
