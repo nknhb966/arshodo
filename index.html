@@ -170,28 +170,25 @@ colorWheel.add(colorPointer);
 }
 
 function createInkSystem(){
+    const geo=new THREE.SphereGeometry(1,6,6);
 
-const geo=new THREE.SphereGeometry(1,6,6);
+    const mat=new THREE.MeshStandardMaterial({
+        vertexColors:true,
+        roughness:1
+    });
 
-const mat=new THREE.MeshStandardMaterial({
-vertexColors:true,
-roughness:1
-});
+    instancedMesh=new THREE.InstancedMesh(geo,mat,MAX_STAMPS);
+    instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    instancedMesh.frustumCulled=false;
 
-instancedMesh=new THREE.InstancedMesh(geo,mat,MAX_STAMPS);
+    instancedMesh.instanceColor=new THREE.InstancedBufferAttribute(colorArray,3);
 
-instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-instancedMesh.frustumCulled=false;
+    scene.add(instancedMesh);
 
-instancedMesh.instanceColor=new THREE.InstancedBufferAttribute(colorArray,3);
-
-scene.add(instancedMesh);
-
-dummy.scale.set(0,0,0);
-dummy.updateMatrix();
-instancedMesh.setMatrixAt(0,dummy.matrix);
-instancedMesh.count=1;
-
+    // 初期化をクリア
+    dummy.scale.set(0,0,0);
+    dummy.updateMatrix();
+    instancedMesh.count = 0; // ★0に変更
 }
 
 // ★ 毎フレーム右手gamepad取得
