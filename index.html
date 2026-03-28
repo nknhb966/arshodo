@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道 Color Wheel</title>
+<title>AR書道</title>
 <style>
 body{margin:0;overflow:hidden;}
 </style>
@@ -116,7 +116,7 @@ brush.add(tip);
 
 brush.rotation.set(-Math.PI/3,0,Math.PI/2);
 
-// ★ 色ホイール追加
+// ★ 色ホイール
 createColorWheel();
 colorWheel.position.z=-0.08;
 colorWheel.rotation.x=Math.PI/2;
@@ -127,6 +127,7 @@ rightController.add(brush);
 
 }
 
+// ★ 90°回転済み色ホイール
 function createColorWheel(){
 
 const radius=0.06;
@@ -139,7 +140,9 @@ const colors=[];
 for(let i=0;i<=segments;i++){
 
 const t=i/segments;
-const hue=t;
+
+// ★ 90度回転（+0.25）
+const hue=(t+0.25)%1.0;
 
 const c=new THREE.Color();
 c.setHSL(hue,1,0.5);
@@ -195,7 +198,6 @@ instancedMesh.count=1;
 
 }
 
-// ★ 毎フレーム右手gamepad取得
 function updateGamepad(){
 
 const session=renderer.xr.getSession();
@@ -215,7 +217,7 @@ if(!gamepad) return 0;
 return gamepad.buttons[0]?.value||0;
 }
 
-// ★ 色更新＋UI
+// ★ 90°回転ロジック一致
 function updateColor(){
 
 if(!gamepad) return;
@@ -232,7 +234,6 @@ y=gamepad.axes[1];
 
 const len=Math.hypot(x,y);
 
-// 非表示条件
 if(len<0.15 || getTrigger()>0.05){
 colorWheel.visible=false;
 return;
@@ -241,11 +242,13 @@ return;
 colorWheel.visible=true;
 
 const angle=Math.atan2(y,x);
-const hue=(angle+Math.PI)/(Math.PI*2);
+
+// ★ 90度回転
+const hue=((angle+Math.PI)/(Math.PI*2)+0.25)%1.0;
 
 brushColor.setHSL(hue,1,0.5);
 
-// ポインタ位置
+// ポインタ
 const r=0.055;
 
 colorPointer.position.set(
@@ -294,7 +297,6 @@ hasLast=true;
 
 }
 
-// リングバッファ
 function stamp(position,size){
 
 const index=stampIndex%MAX_STAMPS;
@@ -320,7 +322,7 @@ if(fadeOutCount<=0) return;
 const size=lastSize*(fadeOutCount/FADE_STEPS);
 stamp(pos,size);
 
-fadeOutCount--;
+fadeOut--;
 
 }
 
