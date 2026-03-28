@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道（InstancedMesh＋ColorWheel）</title>
+<title>AR書道</title>
 <style>
 body{margin:0;overflow:hidden;}
 </style>
@@ -219,17 +219,21 @@ function draw(){
   hasLast=true;
 }
 
-// リングバッファで上書き
 function stamp(position,size){
-  const index=stampIndex%MAX_STAMPS;
+  const index = stampIndex % MAX_STAMPS;
+
   dummy.position.copy(position);
   dummy.scale.set(size,size*0.6,size);
   dummy.updateMatrix();
   instancedMesh.setMatrixAt(index,dummy.matrix);
 
-  colorArray[index*3+0]=brushColor.r;
-  colorArray[index*3+1]=brushColor.g;
-  colorArray[index*3+2]=brushColor.b;
+  // ★ここで色を反映
+  colorArray[index*3+0] = brushColor.r;
+  colorArray[index*3+1] = brushColor.g;
+  colorArray[index*3+2] = brushColor.b;
+
+  // ★更新フラグを即時セット
+  instancedMesh.instanceColor.needsUpdate = true;
 
   stampIndex++;
 }
