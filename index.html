@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道</title>
+<title>AR書道a</title>
 
 <style>
 body{
@@ -85,15 +85,22 @@ scene.add(light);
 
 controller = renderer.xr.getController(0);
 
-controller.addEventListener("connected", (event) => {
-    if (event.data.handedness !== "right") {
-        controller.visible = false;
-    } else {
-        controller.visible = true;
+renderer.xr.addEventListener("sessionstart", () => {
+  const session = renderer.xr.getSession();
+
+  for (const source of session.inputSources) {
+    if (source.handedness === "right") {
+      controller = renderer.xr.getController(0);
+      scene.add(controller);
+      break;
     }
+  }
 });
 
 scene.add(controller);
+
+const controllerL = renderer.xr.getController(1);
+scene.remove(controllerL);
 
 createBrush();
 createInkSystem();
@@ -114,19 +121,20 @@ updateGamepad();
 
 function updateGamepad(){
 
-    const session = renderer.xr.getSession();
-    if(!session) return;
+const session = renderer.xr.getSession();
+if(!session) return;
 
-    gamepad = null;
+gamepad = null;
 
-    for(const source of session.inputSources){
+for(const source of session.inputSources){
 
-        if(source.handedness === "right" && source.gamepad){
-            gamepad = source.gamepad;
-            break;
-        }
+// ★右手のみ
+if(source.handedness === "right" && source.gamepad){
+gamepad = source.gamepad;
+break;
+}
 
-    }
+}
 
 }
 
