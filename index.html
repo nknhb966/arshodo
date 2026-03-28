@@ -127,42 +127,19 @@ function createColorWheel(){
 }
 
 function createInkSystem(){
-    const geo=new THREE.SphereGeometry(1,6,6);
-    
-    // ★ MeshStandardMaterial をカスタムシェーダーで instanceColor 対応
-    const mat = new THREE.MeshStandardMaterial({vertexColors:true, roughness:1});
-    mat.onBeforeCompile = (shader)=>{
-        shader.vertexShader = shader.vertexShader.replace(
-            '#include <common>',
-            `#include <common>
-            attribute vec3 instanceColor;
-            varying vec3 vInstanceColor;`
-        );
-        shader.vertexShader = shader.vertexShader.replace(
-            '#include <begin_vertex>',
-            `#include <begin_vertex>
-            vInstanceColor = instanceColor;`
-        );
-        shader.fragmentShader = shader.fragmentShader.replace(
-            '#include <common>',
-            `#include <common>
-            varying vec3 vInstanceColor;`
-        );
-        shader.fragmentShader = shader.fragmentShader.replace(
-            'vec4 diffuseColor = vec4( diffuse, opacity );',
-            'vec4 diffuseColor = vec4( vInstanceColor, opacity );'
-        );
-    };
+    const geo = new THREE.SphereGeometry(1,6,6);
+
+    // MeshBasicMaterial に変更
+    const mat = new THREE.MeshBasicMaterial({ vertexColors:true });
 
     instancedMesh = new THREE.InstancedMesh(geo, mat, MAX_STAMPS);
     instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    instancedMesh.frustumCulled=false;
-    instancedMesh.instanceColor=new THREE.InstancedBufferAttribute(colorArray,3);
+    instancedMesh.frustumCulled = false;
+    instancedMesh.instanceColor = new THREE.InstancedBufferAttribute(colorArray, 3);
 
     scene.add(instancedMesh);
-    instancedMesh.count=0;
+    instancedMesh.count = 0; // 初期状態は表示なし
 }
-
 // --- Gamepad & Trigger ---
 function updateGamepad(){
     const session=renderer.xr.getSession();
