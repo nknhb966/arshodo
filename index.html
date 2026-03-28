@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道</title>
+<title>AR書道a</title>
 <style>
 body{margin:0;overflow:hidden;}
 </style>
@@ -170,25 +170,22 @@ colorWheel.add(colorPointer);
 }
 
 function createInkSystem(){
-    const geo=new THREE.SphereGeometry(1,6,6);
-
-    const mat=new THREE.MeshStandardMaterial({
-        vertexColors:true,
-        roughness:1
+    const geo = new THREE.SphereGeometry(1,6,6);
+    const mat = new THREE.MeshStandardMaterial({
+        vertexColors: true,
+        roughness: 1
     });
 
-    instancedMesh=new THREE.InstancedMesh(geo,mat,MAX_STAMPS);
+    instancedMesh = new THREE.InstancedMesh(geo, mat, MAX_STAMPS);
     instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    instancedMesh.frustumCulled=false;
+    instancedMesh.frustumCulled = false;
 
-    instancedMesh.instanceColor=new THREE.InstancedBufferAttribute(colorArray,3);
+    instancedMesh.instanceColor = new THREE.InstancedBufferAttribute(colorArray,3);
 
     scene.add(instancedMesh);
 
-    // 初期化をクリア
-    dummy.scale.set(0,0,0);
-    dummy.updateMatrix();
-    instancedMesh.count = 0; // ★0に変更
+    // 初期インスタンスはなし
+    instancedMesh.count = 0;
 }
 
 // ★ 毎フレーム右手gamepad取得
@@ -290,23 +287,25 @@ hasLast=true;
 
 }
 
-// リングバッファ
 function stamp(position,size){
+    const index = stampIndex % MAX_STAMPS;
 
-const index=stampIndex%MAX_STAMPS;
+    dummy.position.copy(position);
+    dummy.scale.set(size,size*0.6,size);
+    dummy.updateMatrix();
 
-dummy.position.copy(position);
-dummy.scale.set(size,size*0.6,size);
-dummy.updateMatrix();
+    instancedMesh.setMatrixAt(index,dummy.matrix);
 
-instancedMesh.setMatrixAt(index,dummy.matrix);
+    colorArray[index*3+0] = brushColor.r;
+    colorArray[index*3+1] = brushColor.g;
+    colorArray[index*3+2] = brushColor.b;
 
-colorArray[index*3+0]=brushColor.r;
-colorArray[index*3+1]=brushColor.g;
-colorArray[index*3+2]=brushColor.b;
+    stampIndex++;
 
-stampIndex++;
-
+    // ★ 描画に反映
+    instancedMesh.count = Math.min(stampIndex, MAX_STAMPS);
+    instancedMesh.instanceMatrix.needsUpdate = true;
+    instancedMesh.instanceColor.needsUpdate = true;
 }
 
 function fadeOut(){
