@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道（InstancedMesh 色対応）</title>
+<title>AR書道（色固定）</title>
 <style>
 body{margin:0;overflow:hidden;}
 </style>
@@ -102,19 +102,14 @@ function attachBrush(){
 
 function createInkSystem(){
     const geo = new THREE.SphereGeometry(1,6,6);
-
-    // 安定版：vertexColors:true を使う
-    const mat = new THREE.MeshBasicMaterial({ vertexColors: true });
-
+    const mat = new THREE.MeshBasicMaterial({vertexColors:true});
     instancedMesh = new THREE.InstancedMesh(geo, mat, MAX_STAMPS);
     instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     instancedMesh.frustumCulled = false;
-
-    // インスタンスカラーをセット
     instancedMesh.instanceColor = new THREE.InstancedBufferAttribute(colorArray, 3);
 
-    instancedMesh.count = 0;
     scene.add(instancedMesh);
+    instancedMesh.count = 0;
 }
 
 // 毎フレーム右手gamepad取得
@@ -157,7 +152,7 @@ function draw(){
     hasLast = true;
 }
 
-function stamp(position, size, color=[0,0,1]){
+function stamp(position, size){
     const index = stampIndex % MAX_STAMPS;
 
     dummy.position.copy(position);
@@ -165,10 +160,10 @@ function stamp(position, size, color=[0,0,1]){
     dummy.updateMatrix();
     instancedMesh.setMatrixAt(index, dummy.matrix);
 
-    // 色を設定（0〜1）
-    colorArray[index*3+0] = color[0];
-    colorArray[index*3+1] = color[1];
-    colorArray[index*3+2] = color[2];
+    // 色は常に黒
+    colorArray[index*3+0] = 0x11/0xff;
+    colorArray[index*3+1] = 0x11/0xff;
+    colorArray[index*3+2] = 0x11/0xff;
 
     stampIndex++;
     instancedMesh.count = Math.min(stampIndex, MAX_STAMPS);
