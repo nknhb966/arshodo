@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道（なめらか最適化版）</title>
+<title>AR書道（書道MAX版）</title>
 <style>
 body{margin:0;overflow:hidden;}
 </style>
@@ -21,14 +21,15 @@ let gamepad=null;
 let brush,brushTip;
 
 let drawing=false;
+let wasDrawing=false;
 
 const meshes=[];
-const MAX_MESHES=2500;
+const MAX_MESHES=3000;
 
-// ★ なめらか設定
+// ★ パラメータ（ここが味付け）
 const STEP_DISTANCE=0.003;
-const MIN_SIZE=0.004;
-const MAX_SIZE=0.03;
+const MIN_SIZE=0.002;
+const MAX_SIZE=0.035;
 
 let lastSize=0.01;
 
@@ -38,6 +39,10 @@ const pos=new THREE.Vector3();
 const lastPos=new THREE.Vector3();
 const interp=new THREE.Vector3();
 let hasLast=false;
+
+// 抜き処理
+let fadeOutCount=0;
+const FADE_STEPS=10;
 
 init();
 animate();
@@ -114,12 +119,8 @@ rightController.add(brush);
 }
 
 function updateBrushTransform(){
-
 if(!brush) return;
-
-// 書きやすい角度固定
 brush.rotation.set(-Math.PI/3,0,Math.PI/2);
-
 }
 
 function updateColor(){
@@ -135,7 +136,6 @@ const angle=Math.atan2(y,x);
 const hue=(angle+Math.PI)/(Math.PI*2);
 
 brushColor.setHSL(hue,1,0.5);
-
 brushTip.material.color.copy(brushColor);
 
 }
@@ -153,7 +153,10 @@ if(hasLast){
 
 const dist=pos.distanceTo(lastPos);
 
-// ★ 最低2ステップ保証
+// ★ 速度
+const speed = dist;
+
+// ★ ステップ
 const steps=Math.max(2,Math.floor(dist/STEP_DISTANCE));
 
 for(let i=1;i<=steps;i++){
@@ -161,10 +164,20 @@ for(let i=1;i<=steps;i++){
 const t=i/steps;
 interp.lerpVectors(lastPos,pos,t);
 
-const targetSize=THREE.MathUtils.lerp(MIN_SIZE,MAX_SIZE,trigger());
+// ★ 筆圧
+const pressure=trigger();
 
-// ★ サイズスムージング
-const size=THREE.MathUtils.lerp(lastSize,targetSize,0.3);
+// ★ 速度で細く
+const speedFactor = THREE.MathUtils.clamp(1.0 - speed * 20.0, 0.2, 1.0);
+
+// ★ 太さ合成
+let targetSize = MAX_SIZE * pressure * speedFactor;
+
+// 最低サイズ保証
+targetSize = Math.max(targetSize, MIN_SIZE);
+
+// ★ スムージング
+const size=THREE.MathUtils.lerp(lastSize,targetSize,0.25);
 lastSize=size;
 
 stamp(interp,size);
@@ -175,6 +188,18 @@ stamp(interp,size);
 
 lastPos.copy(pos);
 hasLast=true;
+
+}
+
+function fadeOut(){
+
+if(fadeOutCount<=0) return;
+
+const size = lastSize * (fadeOutCount / FADE_STEPS);
+
+stamp(pos,size);
+
+fadeOutCount--;
 
 }
 
@@ -190,7 +215,7 @@ new THREE.SphereGeometry(size,6,6),
 new THREE.MeshStandardMaterial({color:brushColor})
 );
 
-// ★ 少し潰して筆っぽく
+// 筆っぽく潰す
 mesh.scale.set(1,0.6,1);
 
 mesh.position.copy(position);
@@ -213,20 +238,18 @@ function checkButtons(){
 
 if(!gamepad) return;
 
-// Aボタン（リセット）
+// A：リセット
 if(gamepad.buttons.length>4){
 if(gamepad.buttons[4].pressed){
 clearAll();
 }
 }
 
-// Bボタン（黒）
+// B：黒
 if(gamepad.buttons.length>5){
 if(gamepad.buttons[5].pressed){
-
 brushColor.set(0x111111);
 brushTip.material.color.set(0x111111);
-
 }
 }
 
@@ -246,7 +269,10 @@ renderer.render(scene,camera);
 return;
 }
 
-if(trigger()>0.05){
+const t=trigger();
+
+// 描画開始
+if(t>0.05){
 
 if(!drawing){
 hasLast=false;
@@ -255,8 +281,18 @@ drawing=true;
 
 draw();
 
+fadeOutCount=FADE_STEPS;
+
 }else{
+
+// 書き終わり（抜き）
+if(drawing){
 drawing=false;
+fadeOut();
+}else{
+fadeOut();
+}
+
 }
 
 checkButtons();
