@@ -129,6 +129,7 @@ function draw(){
     const trigger = getTriggerValue(0); // 人差し指
     if(trigger < 0.05){
         drawing=false;
+        hasLast = false;
         return;
     }
 
