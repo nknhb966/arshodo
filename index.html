@@ -2,11 +2,14 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道（筆位置一致版）</title>
-<style>body{margin:0;overflow:hidden;}</style>
+<title>AR書道（書道挙動＋移動回転）</title>
+<style>
+body{margin:0;overflow:hidden;}
+</style>
 </head>
 <body>
 <script type="module">
+
 import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
 import { ARButton } from "https://unpkg.com/three@0.160.0/examples/jsm/webxr/ARButton.js";
 
@@ -14,7 +17,8 @@ let scene, camera, renderer;
 let controller0, controller1, rightController=null;
 let gamepad=null;
 
-const STEP_DISTANCE = 0.005;
+// ===== 書道パラメータ =====
+const STEP_DISTANCE = 0.004;
 const MIN_SIZE = 0.001;
 const MAX_SIZE = 0.030;
 const MAX_STAMPS = 8000;
@@ -26,84 +30,114 @@ const dummy = new THREE.Object3D();
 const pos = new THREE.Vector3();
 const lastPos = new THREE.Vector3();
 const interp = new THREE.Vector3();
+
 let hasLast=false;
 let lastSize=0.01;
-
 let drawing=false;
 
-// 描画をまとめる textGroup
+// フェード（払い）
+let fadeOutCount = 0;
+const FADE_STEPS = 8;
+
+// ===== グループ（移動・回転対象）=====
 let textGroup = new THREE.Group();
 
+// ===== 初期化 =====
 init();
 animate();
 
 function init(){
     scene = new THREE.Scene();
-    camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.01, 20);
+
+    camera = new THREE.PerspectiveCamera(
+        70,
+        window.innerWidth/window.innerHeight,
+        0.01,
+        20
+    );
+
     renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.xr.enabled=true;
-    document.body.appendChild(renderer.domElement);
-    document.body.appendChild(ARButton.createButton(renderer, {requiredFeatures:["local-floor"]}));
+    renderer.xr.enabled = true;
 
-    scene.add(new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1));
+    document.body.appendChild(renderer.domElement);
+    document.body.appendChild(
+        ARButton.createButton(renderer, {requiredFeatures:["local-floor"]})
+    );
+
+    scene.add(new THREE.HemisphereLight(0xffffff,0xbbbbff,1));
 
     controller0 = renderer.xr.getController(0);
     controller1 = renderer.xr.getController(1);
     scene.add(controller0);
     scene.add(controller1);
+
     controller0.addEventListener("connected", onConnected);
     controller1.addEventListener("connected", onConnected);
 
     createInkSystem();
     scene.add(textGroup);
+
     window.addEventListener("resize", resize);
 }
 
+// ===== コントローラ接続 =====
 function onConnected(event){
-    const data = event.data;
-    if(data.handedness === "right"){
+    if(event.data.handedness === "right"){
         rightController = event.target;
         attachBrush();
     }
 }
 
+// ===== 筆 =====
 function attachBrush(){
     if(!rightController) return;
+
     controller0.clear();
     controller1.clear();
 
     const brush = new THREE.Group();
+
     const stick = new THREE.Mesh(
         new THREE.CylinderGeometry(0.012,0.012,0.25,6),
         new THREE.MeshStandardMaterial({color:0x884400})
     );
+
     const tip = new THREE.Mesh(
         new THREE.ConeGeometry(0.015,0.05,6),
         new THREE.MeshStandardMaterial({color:0x111111})
     );
+
     stick.rotation.x = Math.PI/2;
     tip.rotation.x = -Math.PI/2;
     stick.position.z = 0.15;
+
     brush.add(stick);
     brush.add(tip);
-    brush.rotation.set(-Math.PI/3, 0, Math.PI/2);
+
+    brush.rotation.set(-Math.PI/3,0,Math.PI/2);
+
     rightController.add(brush);
 }
 
+// ===== インク =====
 function createInkSystem(){
-    const geo = new THREE.SphereGeometry(1, 10, 10);
+    const geo = new THREE.SphereGeometry(1,10,10);
     const mat = new THREE.MeshStandardMaterial({color:0x111111});
+
     instancedMesh = new THREE.InstancedMesh(geo, mat, MAX_STAMPS);
     instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     instancedMesh.frustumCulled = false;
+
     textGroup.add(instancedMesh);
     instancedMesh.count = 0;
 }
 
+// ===== Gamepad =====
 function updateGamepad(){
     const session = renderer.xr.getSession();
     if(!session) return;
+
     for(const source of session.inputSources){
         if(source.handedness === "right" && source.gamepad){
             gamepad = source.gamepad;
@@ -112,23 +146,28 @@ function updateGamepad(){
     }
 }
 
-function getTriggerValue(index){ return gamepad ? gamepad.buttons[index]?.value||0 : 0; }
+function getTriggerValue(index){
+    return gamepad ? gamepad.buttons[index]?.value || 0 : 0;
+}
 
+// ===== 描画開始リセット =====
 function startNewDrawing(){
-    // 新しい描画開始時に lastPos を筆位置の textGroup ローカル座標にリセット
     pos.setFromMatrixPosition(rightController.matrixWorld);
     const localPos = pos.clone();
     textGroup.worldToLocal(localPos);
+
     lastPos.copy(localPos);
     hasLast = false;
     lastSize = 0.01;
 }
 
+// ===== 描画 =====
 function draw(){
     if(!rightController) return;
-    const trigger = getTriggerValue(0); // 人差し指
+
+    const trigger = getTriggerValue(0);
     if(trigger < 0.05){
-        drawing=false;
+        drawing = false;
         return;
     }
 
@@ -139,14 +178,25 @@ function draw(){
 
     pos.setFromMatrixPosition(rightController.matrixWorld);
     const localPos = pos.clone();
-    textGroup.worldToLocal(localPos); // ローカル座標に変換
+    textGroup.worldToLocal(localPos);
 
     if(hasLast){
         const dist = localPos.distanceTo(lastPos);
-        const steps = Math.max(1, Math.floor(dist/STEP_DISTANCE));
+        const steps = Math.max(2, Math.floor(dist / STEP_DISTANCE));
+
         for(let i=1;i<=steps;i++){
-            interp.lerpVectors(lastPos, localPos, i/steps);
-            stamp(interp, lastSize);
+            const t = i/steps;
+            interp.lerpVectors(lastPos, localPos, t);
+
+            // ===== 書道ロジック =====
+            const speedFactor = THREE.MathUtils.clamp(1.0 - dist*20.0, 0.2, 1.0);
+            let targetSize = MAX_SIZE * trigger * speedFactor;
+            targetSize = Math.max(targetSize, MIN_SIZE);
+
+            const size = THREE.MathUtils.lerp(lastSize, targetSize, 0.25);
+            lastSize = size;
+
+            stamp(interp, size);
         }
     }
 
@@ -154,27 +204,54 @@ function draw(){
     hasLast = true;
 }
 
+// ===== スタンプ =====
 function stamp(position, size){
     if(stampIndex >= MAX_STAMPS) return;
+
     dummy.position.copy(position);
-    dummy.scale.set(size, size, size);
+
+    // 筆っぽい潰れ
+    dummy.scale.set(size, size*0.6, size);
+
     dummy.updateMatrix();
+
     instancedMesh.setMatrixAt(stampIndex, dummy.matrix);
+
     stampIndex++;
     instancedMesh.count = Math.min(stampIndex, MAX_STAMPS);
     instancedMesh.instanceMatrix.needsUpdate = true;
 }
 
-// 中指トリガーで移動・回転
+// ===== フェード（払い）=====
+function fadeOut(){
+    if(fadeOutCount <= 0) return;
+
+    const size = lastSize * (fadeOutCount / FADE_STEPS);
+    stamp(lastPos, size);
+
+    fadeOutCount--;
+}
+
+// ===== 移動・回転 =====
 let rotationActive=false;
 let prevControllerPos = new THREE.Vector3();
+
 const panSensitivity = 1.0;
 const rotSensitivity = 2.0;
 
 function handleRotationAndPan(){
     if(!rightController) return;
-    const midTrigger = getTriggerValue(1); // 中指
-    if(midTrigger < 0.05){ rotationActive=false; prevControllerPos.set(0,0,0); return; }
+
+    const midTrigger = getTriggerValue(1);
+
+    if(midTrigger < 0.05){
+        rotationActive=false;
+        prevControllerPos.set(0,0,0);
+        return;
+    }
+
+    // ★ 線を切る（最重要）
+    hasLast = false;
 
     const currentPos = new THREE.Vector3().setFromMatrixPosition(rightController.matrixWorld);
 
@@ -196,29 +273,41 @@ function handleRotationAndPan(){
     prevControllerPos.copy(currentPos);
 }
 
-function animate(){ renderer.setAnimationLoop(render); }
+// ===== ループ =====
+function animate(){
+    renderer.setAnimationLoop(render);
+}
 
 function render(){
     updateGamepad();
-    if(!rightController){ renderer.render(scene,camera); return; }
 
-    const trigger = getTriggerValue(0); // 人差し指
+    if(!rightController){
+        renderer.render(scene,camera);
+        return;
+    }
+
+    const trigger = getTriggerValue(0);
+
     if(trigger > 0.05){
         draw();
+        fadeOutCount = FADE_STEPS;
     } else {
-        drawing=false;
-        hasLast=false;
+        drawing = false;
+        hasLast = false;
+        fadeOut();
         handleRotationAndPan();
     }
 
     renderer.render(scene,camera);
 }
 
+// ===== リサイズ =====
 function resize(){
     camera.aspect = window.innerWidth/window.innerHeight;
     camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth,window.innerHeight);
+    renderer.setSize(window.innerWidth, window.innerHeight);
 }
+
 </script>
 </body>
 </html>
