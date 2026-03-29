@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道</title>
+<title>AiR書道</title>
 <style>
 body{margin:0;overflow:hidden;}
 </style>
@@ -19,7 +19,7 @@ let controller0, controller1, rightController = null;
 let gamepad = null;
 let drawing = false;
 
-const STEP_DISTANCE = 0.004;  // 微調整で滑らか
+const STEP_DISTANCE = 0.004;
 const MIN_SIZE = 0.001;
 const MAX_SIZE = 0.030;
 const MAX_STAMPS = 8000;
@@ -50,7 +50,7 @@ function init(){
     renderer.xr.enabled = true;
     document.body.appendChild(renderer.domElement);
     document.body.appendChild(ARButton.createButton(renderer, {requiredFeatures:["local-floor"]}));
-    
+
     scene.add(new THREE.HemisphereLight(0xffffff,0xbbbbff,1));
 
     controller0 = renderer.xr.getController(0);
@@ -111,9 +111,9 @@ function createInkSystem(){
     instancedMesh = new THREE.InstancedMesh(geo, mat, MAX_STAMPS);
     instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     instancedMesh.frustumCulled = false;
+
     scene.add(instancedMesh);
 
-    // 初期化
     dummy.position.set(0,0,-1000);
     dummy.scale.set(0,0,0);
     dummy.updateMatrix();
@@ -166,13 +166,14 @@ function draw(){
 }
 
 function stamp(position, size){
-    if(stampIndex >= MAX_STAMPS) stampIndex = 0;
+    // 循環バッファ化
+    const index = stampIndex % MAX_STAMPS;
 
     dummy.position.copy(position);
-    dummy.scale.set(size, size*0.6, size);  // 楕円形に調整
+    dummy.scale.set(size, size*0.6, size); // 楕円形
     dummy.updateMatrix();
 
-    instancedMesh.setMatrixAt(stampIndex, dummy.matrix);
+    instancedMesh.setMatrixAt(index, dummy.matrix);
 
     stampIndex++;
     instancedMesh.count = Math.min(stampIndex, MAX_STAMPS);
