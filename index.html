@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道（統合textGroup版）</title>
+<title>AR書道（筆位置一致版）</title>
 <style>body{margin:0;overflow:hidden;}</style>
 </head>
 <body>
@@ -115,40 +115,48 @@ function updateGamepad(){
 function getTriggerValue(index){ return gamepad ? gamepad.buttons[index]?.value||0 : 0; }
 
 function startNewDrawing(){
-    // 新しい描画の開始時に前回位置をリセット
+    // 新しい描画開始時に lastPos を筆位置の textGroup ローカル座標にリセット
+    pos.setFromMatrixPosition(rightController.matrixWorld);
+    const localPos = pos.clone();
+    textGroup.worldToLocal(localPos);
+    lastPos.copy(localPos);
     hasLast = false;
     lastSize = 0.01;
 }
 
 function draw(){
     if(!rightController) return;
-
     const trigger = getTriggerValue(0); // 人差し指
-    if(trigger < 0.05) return;
+    if(trigger < 0.05){
+        drawing=false;
+        return;
+    }
 
-    // 描画開始時にリセット
     if(!drawing){
         startNewDrawing();
         drawing = true;
     }
 
     pos.setFromMatrixPosition(rightController.matrixWorld);
+    const localPos = pos.clone();
+    textGroup.worldToLocal(localPos); // ローカル座標に変換
+
     if(hasLast){
-        const dist = pos.distanceTo(lastPos);
+        const dist = localPos.distanceTo(lastPos);
         const steps = Math.max(1, Math.floor(dist/STEP_DISTANCE));
         for(let i=1;i<=steps;i++){
-            const t = i/steps;
-            interp.lerpVectors(lastPos, pos, t);
+            interp.lerpVectors(lastPos, localPos, i/steps);
             stamp(interp, lastSize);
         }
     }
-    lastPos.copy(pos);
+
+    lastPos.copy(localPos);
     hasLast = true;
 }
 
 function stamp(position, size){
     if(stampIndex >= MAX_STAMPS) return;
-    dummy.position.copy(position); // ワールド座標そのまま
+    dummy.position.copy(position);
     dummy.scale.set(size, size, size);
     dummy.updateMatrix();
     instancedMesh.setMatrixAt(stampIndex, dummy.matrix);
@@ -198,7 +206,6 @@ function render(){
     if(trigger > 0.05){
         draw();
     } else {
-        drawing = false;
         handleRotationAndPan();
     }
 
