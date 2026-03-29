@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道（pivotGroup対応版）</title>
+<title>AR書道（ワールド座標固定版）</title>
 <style>body{margin:0;overflow:hidden;}</style>
 </head>
 <body>
@@ -29,18 +29,14 @@ const interp=new THREE.Vector3();
 let hasLast=false;
 let lastSize=0.01;
 
-// pivotGroup 用
-let textGroup = new THREE.Group();       // scene直下
-let pivotGroup = new THREE.Group();      // textGroup内で重心中心用
-textGroup.add(pivotGroup);
-
-const colorArray = new Float32Array(MAX_STAMPS*3);
+// 描画群まとめ用
+let textGroup = new THREE.Group(); // ワールド座標直結
+scene?.add(textGroup);
 
 let drawing=false;
 
 // 回転・移動用
 let rotationActive=false;
-let pivotComputed=false;
 let prevControllerPos = new THREE.Vector3();
 const panSensitivity = 1.0;
 const rotSensitivity = 2.0;
@@ -109,7 +105,7 @@ function createInkSystem(){
     instancedMesh=new THREE.InstancedMesh(geo, mat, MAX_STAMPS);
     instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     instancedMesh.frustumCulled=false;
-    pivotGroup.add(instancedMesh);
+    textGroup.add(instancedMesh);
     instancedMesh.count=0;
 }
 
@@ -148,7 +144,7 @@ function draw(){
 
 function stamp(position, size){
     if(stampIndex>=MAX_STAMPS) return;
-    dummy.position.copy(position);
+    dummy.position.copy(position); // ワールド座標そのまま
     dummy.scale.set(size,size,size);
     dummy.updateMatrix();
     instancedMesh.setMatrixAt(stampIndex,dummy.matrix);
@@ -157,24 +153,9 @@ function stamp(position, size){
     instancedMesh.instanceMatrix.needsUpdate=true;
 }
 
-// pivotGroup に重心を適用
-function computePivot(){
-    if(stampIndex===0) return;
-    let min=new THREE.Vector3(Infinity,Infinity,Infinity);
-    let max=new THREE.Vector3(-Infinity,-Infinity,-Infinity);
-    for(let i=0;i<Math.min(stampIndex,MAX_STAMPS);i++){
-        instancedMesh.getMatrixAt(i,dummy.matrix);
-        dummy.position.setFromMatrixPosition(dummy.matrix);
-        min.min(dummy.position);
-        max.max(dummy.position);
-    }
-    const center = min.clone().add(max).multiplyScalar(0.5);
-    pivotGroup.position.set(-center.x,-center.y,-center.z);
-    pivotComputed=true;
-}
-
+// 中指トリガーで移動・回転
 function handleRotationAndPan(){
-    if(!rightController || !pivotComputed) return;
+    if(!rightController) return;
     const midTrigger = getTriggerValue(1); // 中指
     if(midTrigger < 0.05){ rotationActive=false; prevControllerPos.set(0,0,0); return; }
 
@@ -189,12 +170,12 @@ function handleRotationAndPan(){
     const delta = currentPos.clone().sub(prevControllerPos);
 
     if(midTrigger < 0.9){
-        // 半押し：平行移動（パン）
-        pivotGroup.position.add(delta.multiplyScalar(1.0));
+        // 半押し：平行移動（ワールド座標）
+        textGroup.position.add(delta.multiplyScalar(panSensitivity));
     } else {
-        // 全押し：回転
-        pivotGroup.rotation.y += delta.x * rotSensitivity;
-        pivotGroup.rotation.x += delta.y * rotSensitivity;
+        // 全押し：回転（ワールド座標）
+        textGroup.rotation.y += delta.x * rotSensitivity;
+        textGroup.rotation.x += delta.y * rotSensitivity;
     }
 
     prevControllerPos.copy(currentPos);
@@ -210,12 +191,8 @@ function render(){
     if(trigger>0.05){
         drawing=true;
         draw();
-        pivotComputed=false; // 描画中は重心計算不要
     } else {
-        if(drawing){
-            drawing=false;
-            computePivot(); // 描画終了時に重心計算
-        }
+        drawing=false;
         handleRotationAndPan();
     }
 
