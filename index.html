@@ -2,307 +2,231 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道（Quest最適版color）</title>
-<style>
-body{margin:0;overflow:hidden;}
-</style>
+<title>AR書道</title>
+<style>body{margin:0;overflow:hidden;}</style>
 </head>
-
 <body>
 <script type="module">
-
 import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
 import { ARButton } from "https://unpkg.com/three@0.160.0/examples/jsm/webxr/ARButton.js";
 
-let scene,camera,renderer;
-let controller0,controller1,rightController=null;
-let gamepad=null;
+let scene, camera, renderer;
+let controller0, controller1, rightController = null;
+let gamepad = null;
 
-let brush,brushTip;
+const STEP_DISTANCE = 0.005;
+const MIN_SIZE = 0.001;
+const MAX_SIZE = 0.03;
+const MAX_STAMPS = 8000;
 
-let drawing=false;
+let instancedMesh;
+let stampIndex = 0;
 
-const meshes=[];
-const MAX_MESHES=1800; // ★軽さ優先
+const dummy = new THREE.Object3D();
+const pos = new THREE.Vector3();
+const lastPos = new THREE.Vector3();
+const interp = new THREE.Vector3();
+let hasLast = false;
+let lastSize = 0.01;
 
-// ★バランス調整
-const STEP_DISTANCE=0.004;
-const MIN_SIZE=0.002;
-const MAX_SIZE=0.035;
+let textGroup = new THREE.Group(); // 文字全体グループ
+let drawing = false;
 
-let lastSize=0.01;
+let pivotComputed = false;
+let rotationActive = false;
+const targetPosition = new THREE.Vector3();
+const targetRotation = new THREE.Euler();
+let prevControllerPos = new THREE.Vector3();
 
-let brushColor=new THREE.Color(0x111111);
-
-// ★共有（超重要）
-const sharedGeometry = new THREE.SphereGeometry(1,6,6);
-
-const pos=new THREE.Vector3();
-const lastPos=new THREE.Vector3();
-const interp=new THREE.Vector3();
-let hasLast=false;
-
-// 抜き
-let fadeOutCount=0;
-const FADE_STEPS=8;
+const panSensitivity = 1.0;
+const rotSensitivity = 2.0;
+const smoothFactor = 0.2; // スムージング係数（0.0〜1.0）
 
 init();
 animate();
 
-function init(){
+function init() {
+    scene = new THREE.Scene();
+    camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.01, 20);
+    renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.xr.enabled = true;
+    document.body.appendChild(renderer.domElement);
+    document.body.appendChild(ARButton.createButton(renderer, {requiredFeatures:["local-floor"]}));
 
-scene=new THREE.Scene();
+    scene.add(new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1));
 
-camera=new THREE.PerspectiveCamera(70,window.innerWidth/window.innerHeight,0.01,20);
+    controller0 = renderer.xr.getController(0);
+    controller1 = renderer.xr.getController(1);
+    scene.add(controller0);
+    scene.add(controller1);
+    controller0.addEventListener("connected", onConnected);
+    controller1.addEventListener("connected", onConnected);
 
-renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
-renderer.setSize(window.innerWidth,window.innerHeight);
-renderer.xr.enabled=true;
+    createInkSystem();
+    scene.add(textGroup);
 
-document.body.appendChild(renderer.domElement);
-document.body.appendChild(ARButton.createButton(renderer,{requiredFeatures:["local-floor"]}));
-
-scene.add(new THREE.HemisphereLight(0xffffff,0xbbbbff,1));
-
-controller0=renderer.xr.getController(0);
-controller1=renderer.xr.getController(1);
-
-scene.add(controller0);
-scene.add(controller1);
-
-controller0.addEventListener("connected",onConnected);
-controller1.addEventListener("connected",onConnected);
-
-window.addEventListener("resize",resize);
-
+    window.addEventListener("resize", resize);
 }
 
-function onConnected(e){
-
-if(e.data.handedness==="right"){
-rightController=e.target;
-gamepad=e.data.gamepad;
-
-controller0.visible=(rightController===controller0);
-controller1.visible=(rightController===controller1);
-
-attachBrush();
-}
-
+function onConnected(event){
+    const data = event.data;
+    if(data.handedness === "right"){
+        rightController = event.target;
+        attachBrush();
+    }
 }
 
 function attachBrush(){
+    if(!rightController) return;
+    controller0.clear();
+    controller1.clear();
 
-controller0.clear();
-controller1.clear();
-
-brush=new THREE.Group();
-
-const stick=new THREE.Mesh(
-new THREE.CylinderGeometry(0.01,0.01,0.25,6),
-new THREE.MeshStandardMaterial({color:0x884400})
-);
-
-brushTip=new THREE.Mesh(
-new THREE.ConeGeometry(0.015,0.05,6),
-new THREE.MeshStandardMaterial({color:0x111111})
-);
-
-stick.rotation.x=Math.PI/2;
-brushTip.rotation.x=-Math.PI/2;
-
-stick.position.z=0.15;
-
-brush.add(stick);
-brush.add(brushTip);
-
-rightController.add(brush);
-
+    const brush = new THREE.Group();
+    const stick = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.012, 0.012, 0.25, 6),
+        new THREE.MeshStandardMaterial({color:0x884400})
+    );
+    const tip = new THREE.Mesh(
+        new THREE.ConeGeometry(0.015, 0.05, 6),
+        new THREE.MeshStandardMaterial({color:0x111111})
+    );
+    stick.rotation.x = Math.PI/2;
+    tip.rotation.x = -Math.PI/2;
+    stick.position.z = 0.15;
+    brush.add(stick);
+    brush.add(tip);
+    brush.rotation.set(-Math.PI/3, 0, Math.PI/2);
+    rightController.add(brush);
 }
 
-function updateBrushTransform(){
-if(!brush) return;
-brush.rotation.set(-Math.PI/3,0,Math.PI/2);
+function createInkSystem(){
+    const geo = new THREE.SphereGeometry(1,10,10);
+    const mat = new THREE.MeshStandardMaterial({color:0x111111});
+    instancedMesh = new THREE.InstancedMesh(geo, mat, MAX_STAMPS);
+    instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    instancedMesh.frustumCulled = false;
+    textGroup.add(instancedMesh);
+    instancedMesh.count = 0;
 }
 
-function updateColor(){
-
-if(!gamepad) return;
-
-const x=gamepad.axes[2];
-const y=gamepad.axes[3];
-
-if(Math.abs(x)<0.2 && Math.abs(y)<0.2) return;
-
-const angle=Math.atan2(y,x);
-const hue=(angle+Math.PI)/(Math.PI*2);
-
-brushColor.setHSL(hue,1,0.5);
-brushTip.material.color.copy(brushColor);
-
+function updateGamepad(){
+    const session = renderer.xr.getSession();
+    if(!session) return;
+    for(const source of session.inputSources){
+        if(source.handedness === "right" && source.gamepad){
+            gamepad = source.gamepad;
+            return;
+        }
+    }
 }
 
-function trigger(){
-if(!gamepad) return 0;
-return gamepad.buttons[0].value;
-}
+function getTriggerValue(index){ return gamepad ? gamepad.buttons[index]?.value||0 : 0; }
 
 function draw(){
+    if(!rightController) return;
+    const trigger = getTriggerValue(0); // 人差し指
+    if(trigger < 0.05) return;
 
-pos.setFromMatrixPosition(rightController.matrixWorld);
-
-if(hasLast){
-
-const dist=pos.distanceTo(lastPos);
-
-// ★速度
-const speed = dist;
-
-// ★補間
-const steps=Math.max(2,Math.floor(dist/STEP_DISTANCE));
-
-for(let i=1;i<=steps;i++){
-
-const t=i/steps;
-interp.lerpVectors(lastPos,pos,t);
-
-// 筆圧
-const pressure=trigger();
-
-// 速度で細く
-const speedFactor = THREE.MathUtils.clamp(1.0 - speed * 20.0, 0.2, 1.0);
-
-// 太さ
-let targetSize = MAX_SIZE * pressure * speedFactor;
-targetSize = Math.max(targetSize, MIN_SIZE);
-
-// スムージング
-const size=THREE.MathUtils.lerp(lastSize,targetSize,0.25);
-lastSize=size;
-
-stamp(interp,size);
-
+    pos.setFromMatrixPosition(rightController.matrixWorld);
+    if(hasLast){
+        const dist = pos.distanceTo(lastPos);
+        const steps = Math.max(1, Math.floor(dist / STEP_DISTANCE));
+        for(let i=1; i<=steps; i++){
+            const t = i/steps;
+            interp.lerpVectors(lastPos, pos, t);
+            stamp(interp, lastSize);
+        }
+    }
+    lastPos.copy(pos);
+    hasLast = true;
 }
 
+function stamp(position, size){
+    const index = stampIndex % MAX_STAMPS; // 循環バッファ
+    dummy.position.copy(position);
+    dummy.scale.set(size,size,size);
+    dummy.updateMatrix();
+    instancedMesh.setMatrixAt(index, dummy.matrix);
+
+    stampIndex++;
+    instancedMesh.count = Math.min(stampIndex, MAX_STAMPS); // 常に MAX_STAMPS 個表示
+    instancedMesh.instanceMatrix.needsUpdate = true;
 }
 
-lastPos.copy(pos);
-hasLast=true;
-
+function computePivot(){
+    if(stampIndex === 0) return;
+    let min = new THREE.Vector3(Infinity, Infinity, Infinity);
+    let max = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
+    for(let i=0; i<Math.min(stampIndex, MAX_STAMPS); i++){
+        instancedMesh.getMatrixAt(i, dummy.matrix);
+        dummy.position.setFromMatrixPosition(dummy.matrix);
+        min.min(dummy.position);
+        max.max(dummy.position);
+    }
+    const center = min.clone().add(max).multiplyScalar(0.5);
+    targetPosition.set(-center.x, -center.y, -center.z);
+    pivotComputed = true;
 }
 
-function fadeOut(){
+function handleRotationAndPan(){
+    if(!rightController || !pivotComputed) return;
+    const midTrigger = getTriggerValue(1); // 中指
+    if(midTrigger < 0.05){ rotationActive = false; return; }
 
-if(fadeOutCount<=0) return;
+    const currentPos = new THREE.Vector3().setFromMatrixPosition(rightController.matrixWorld);
+    if(!rotationActive){
+        prevControllerPos.copy(currentPos);
+        rotationActive = true;
+        return;
+    }
 
-const size = lastSize * (fadeOutCount / FADE_STEPS);
-stamp(pos,size);
+    const delta = currentPos.clone().sub(prevControllerPos);
 
-fadeOutCount--;
+    // 半押し:平行移動, 全押し:回転
+    if(midTrigger < 0.9){
+        targetPosition.add(delta.clone().multiplyScalar(panSensitivity));
+    } else {
+        targetRotation.y += delta.x * rotSensitivity;
+        targetRotation.x += delta.y * rotSensitivity;
+    }
 
+    prevControllerPos.copy(currentPos);
+
+    // スムージング適用
+    textGroup.position.lerp(targetPosition, smoothFactor);
+    textGroup.rotation.x = THREE.MathUtils.lerp(textGroup.rotation.x, targetRotation.x, smoothFactor);
+    textGroup.rotation.y = THREE.MathUtils.lerp(textGroup.rotation.y, targetRotation.y, smoothFactor);
+    textGroup.rotation.z = THREE.MathUtils.lerp(textGroup.rotation.z, targetRotation.z, smoothFactor);
 }
 
-function stamp(position,size){
-
-if(meshes.length>MAX_MESHES){
-const old=meshes.shift();
-scene.remove(old);
-}
-
-const material = new THREE.MeshStandardMaterial();
-material.color.copy(brushColor);
-
-const mesh=new THREE.Mesh(sharedGeometry, material);
-
-// 筆っぽく
-mesh.scale.set(size, size*0.6, size);
-
-mesh.position.copy(position);
-
-scene.add(mesh);
-meshes.push(mesh);
-
-}
-
-function clearAll(){
-
-meshes.forEach(m=>scene.remove(m));
-meshes.length=0;
-
-hasLast=false;
-
-}
-
-function checkButtons(){
-
-if(!gamepad) return;
-
-// A：リセット
-if(gamepad.buttons.length>4){
-if(gamepad.buttons[4].pressed){
-clearAll();
-}
-}
-
-// B：黒
-if(gamepad.buttons.length>5){
-if(gamepad.buttons[5].pressed){
-brushColor.set(0x111111);
-brushTip.material.color.set(0x111111);
-}
-}
-
-}
-
-function animate(){
-renderer.setAnimationLoop(render);
-}
+function animate(){ renderer.setAnimationLoop(render); }
 
 function render(){
+    updateGamepad();
+    if(!rightController){ renderer.render(scene,camera); return; }
 
-updateBrushTransform();
-updateColor();
+    const trigger = getTriggerValue(0); // 人差し指
+    if(trigger > 0.05){
+        drawing = true;
+        draw();
+        pivotComputed = false; // 描画中は重心計算無効
+    } else {
+        if(drawing){
+            drawing = false;
+            computePivot(); // 描画終了時に重心を計算
+        }
+        handleRotationAndPan(); // 描画後のみスムーズに回転・移動
+    }
 
-if(!rightController){
-renderer.render(scene,camera);
-return;
-}
-
-const t=trigger();
-
-if(t>0.05){
-
-if(!drawing){
-hasLast=false;
-drawing=true;
-}
-
-draw();
-fadeOutCount=FADE_STEPS;
-
-}else{
-
-if(drawing){
-drawing=false;
-fadeOut();
-}else{
-fadeOut();
-}
-
-}
-
-checkButtons();
-
-renderer.render(scene,camera);
-
+    renderer.render(scene,camera);
 }
 
 function resize(){
-camera.aspect=window.innerWidth/window.innerHeight;
-camera.updateProjectionMatrix();
-renderer.setSize(window.innerWidth,window.innerHeight);
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
 }
-
 </script>
 </body>
 </html>
