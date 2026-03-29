@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道</title>
+<title>AR書道a</title>
 <style>body{margin:0;overflow:hidden;}</style>
 </head>
 <body>
@@ -221,6 +221,8 @@ function render(){
     if(trigger > 0.05){
         draw();
     } else {
+        drawing = false;
+        hasLast = false;
         handleRotationAndPan();
     }
 
