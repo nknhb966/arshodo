@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道（筆位置一致版）</title>
+<title>AR書道</title>
 <style>body{margin:0;overflow:hidden;}</style>
 </head>
 <body>
@@ -149,14 +149,19 @@ function draw(){
     }
     // ★★★★★ここまで★★★★★
 
-    if(hasLast){
-        const dist = localPos.distanceTo(lastPos);
-        const steps = Math.max(1, Math.floor(dist/STEP_DISTANCE));
-        for(let i=1;i<=steps;i++){
-            interp.lerpVectors(lastPos, localPos, i/steps);
-            stamp(interp, lastSize);
-        }
+if(hasLast){
+    const dist = localPos.distanceTo(lastPos);
+
+    // ★追加：近すぎる場合は描かない（これが効く）
+    if(dist < STEP_DISTANCE) return;
+
+    const steps = Math.floor(dist/STEP_DISTANCE);
+
+    for(let i=1;i<=steps;i++){
+        interp.lerpVectors(lastPos, localPos, i/steps);
+        stamp(interp, lastSize);
     }
+}
 
     lastPos.copy(localPos);
 }
