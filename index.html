@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道 完全分離版</title>
+<title>AR書道（筆位置一致版）</title>
 <style>body{margin:0;overflow:hidden;}</style>
 </head>
 <body>
@@ -15,6 +15,8 @@ let controller0, controller1, rightController=null;
 let gamepad=null;
 
 const STEP_DISTANCE = 0.005;
+const MIN_SIZE = 0.001;
+const MAX_SIZE = 0.030;
 const MAX_STAMPS = 8000;
 
 let instancedMesh;
@@ -24,11 +26,12 @@ const dummy = new THREE.Object3D();
 const pos = new THREE.Vector3();
 const lastPos = new THREE.Vector3();
 const interp = new THREE.Vector3();
-
 let hasLast=false;
+let lastSize=0.01;
+
 let drawing=false;
 
-// 描画まとめ
+// 描画をまとめる textGroup
 let textGroup = new THREE.Group();
 
 init();
@@ -37,69 +40,63 @@ animate();
 function init(){
     scene = new THREE.Scene();
     camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.01, 20);
-
     renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.xr.enabled=true;
-
     document.body.appendChild(renderer.domElement);
-    document.body.appendChild(ARButton.createButton(renderer,{requiredFeatures:["local-floor"]}));
+    document.body.appendChild(ARButton.createButton(renderer, {requiredFeatures:["local-floor"]}));
 
     scene.add(new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1));
 
     controller0 = renderer.xr.getController(0);
     controller1 = renderer.xr.getController(1);
-    scene.add(controller0, controller1);
-
+    scene.add(controller0);
+    scene.add(controller1);
     controller0.addEventListener("connected", onConnected);
     controller1.addEventListener("connected", onConnected);
 
     createInkSystem();
     scene.add(textGroup);
-
     window.addEventListener("resize", resize);
 }
 
-function onConnected(e){
-    if(e.data.handedness==="right"){
-        rightController = e.target;
+function onConnected(event){
+    const data = event.data;
+    if(data.handedness === "right"){
+        rightController = event.target;
         attachBrush();
     }
 }
 
 function attachBrush(){
     if(!rightController) return;
+    controller0.clear();
+    controller1.clear();
 
     const brush = new THREE.Group();
-
     const stick = new THREE.Mesh(
         new THREE.CylinderGeometry(0.012,0.012,0.25,6),
         new THREE.MeshStandardMaterial({color:0x884400})
     );
-
     const tip = new THREE.Mesh(
         new THREE.ConeGeometry(0.015,0.05,6),
         new THREE.MeshStandardMaterial({color:0x111111})
     );
-
     stick.rotation.x = Math.PI/2;
     tip.rotation.x = -Math.PI/2;
     stick.position.z = 0.15;
-
-    brush.add(stick, tip);
-    brush.rotation.set(-Math.PI/3,0,Math.PI/2);
-
+    brush.add(stick);
+    brush.add(tip);
+    brush.rotation.set(-Math.PI/3, 0, Math.PI/2);
     rightController.add(brush);
 }
 
 function createInkSystem(){
-    const geo = new THREE.SphereGeometry(1,10,10);
+    const geo = new THREE.SphereGeometry(1, 10, 10);
     const mat = new THREE.MeshStandardMaterial({color:0x111111});
-
     instancedMesh = new THREE.InstancedMesh(geo, mat, MAX_STAMPS);
     instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     instancedMesh.frustumCulled = false;
-
     textGroup.add(instancedMesh);
     instancedMesh.count = 0;
 }
@@ -107,129 +104,115 @@ function createInkSystem(){
 function updateGamepad(){
     const session = renderer.xr.getSession();
     if(!session) return;
-
-    for(const s of session.inputSources){
-        if(s.handedness==="right" && s.gamepad){
-            gamepad = s.gamepad;
+    for(const source of session.inputSources){
+        if(source.handedness === "right" && source.gamepad){
+            gamepad = source.gamepad;
             return;
         }
     }
 }
 
-function getTriggerValue(i){
-    return gamepad ? gamepad.buttons[i]?.value||0 : 0;
-}
+function getTriggerValue(index){ return gamepad ? gamepad.buttons[index]?.value||0 : 0; }
 
-// ★ここ重要：lastPosは触らない
 function startNewDrawing(){
+    // 新しい描画開始時に lastPos を筆位置の textGroup ローカル座標にリセット
+    pos.setFromMatrixPosition(rightController.matrixWorld);
+    const localPos = pos.clone();
+    textGroup.worldToLocal(localPos);
+    lastPos.copy(localPos);
     hasLast = false;
+    lastSize = 0.01;
 }
 
 function draw(){
     if(!rightController) return;
-
-    const trigger = getTriggerValue(0);
-
+    const trigger = getTriggerValue(0); // 人差し指
     if(trigger < 0.05){
         drawing=false;
         return;
     }
 
-    if(!drawing){
-        startNewDrawing();
-        drawing=true;
-    }
-
     pos.setFromMatrixPosition(rightController.matrixWorld);
     const localPos = pos.clone();
-    textGroup.worldToLocal(localPos);
+    textGroup.worldToLocal(localPos); // ローカル座標に変換
 
-    // ★最初の1点は絶対描かない（完全分離）
-    if(!hasLast){
+    if(!drawing){
+        // startNewDrawing();
+        // drawing = true;
+        drawing = true;
+
         lastPos.copy(localPos);
         hasLast = true;
-        return;
+
+        return; // ←ここが重要！！補間させない
     }
 
-    const dist = localPos.distanceTo(lastPos);
-
-    // ★近すぎる場合は無視
-    if(dist < STEP_DISTANCE) return;
-
-    const steps = Math.floor(dist / STEP_DISTANCE);
-
-    for(let i=1;i<=steps;i++){
-        interp.lerpVectors(lastPos, localPos, i/steps);
-        stamp(interp, 0.01);
+    if(hasLast){
+        const dist = localPos.distanceTo(lastPos);
+        const steps = Math.max(1, Math.floor(dist/STEP_DISTANCE));
+        for(let i=1;i<=steps;i++){
+            interp.lerpVectors(lastPos, localPos, i/steps);
+            stamp(interp, lastSize);
+        }
     }
 
     lastPos.copy(localPos);
+    hasLast = true;
 }
 
-function stamp(p, s){
-    if(stampIndex>=MAX_STAMPS) return;
-
-    dummy.position.copy(p);
-    dummy.scale.set(s,s,s);
+function stamp(position, size){
+    if(stampIndex >= MAX_STAMPS) return;
+    dummy.position.copy(position);
+    dummy.scale.set(size, size, size);
     dummy.updateMatrix();
-
     instancedMesh.setMatrixAt(stampIndex, dummy.matrix);
-
     stampIndex++;
-    instancedMesh.count = stampIndex;
+    instancedMesh.count = Math.min(stampIndex, MAX_STAMPS);
     instancedMesh.instanceMatrix.needsUpdate = true;
 }
 
-// 移動・回転
+// 中指トリガーで移動・回転
 let rotationActive=false;
-let prevPos = new THREE.Vector3();
+let prevControllerPos = new THREE.Vector3();
+const panSensitivity = 1.0;
+const rotSensitivity = 2.0;
 
-function handleTransform(){
-    const mid = getTriggerValue(1);
+function handleRotationAndPan(){
+    if(!rightController) return;
+    const midTrigger = getTriggerValue(1); // 中指
+    if(midTrigger < 0.05){ rotationActive=false; prevControllerPos.set(0,0,0); return; }
 
-    if(mid<0.05){
-        rotationActive=false;
-        return;
-    }
-
-    const current = new THREE.Vector3().setFromMatrixPosition(rightController.matrixWorld);
+    const currentPos = new THREE.Vector3().setFromMatrixPosition(rightController.matrixWorld);
 
     if(!rotationActive){
-        prevPos.copy(current);
+        prevControllerPos.copy(currentPos);
         rotationActive=true;
         return;
     }
 
-    const delta = current.clone().sub(prevPos);
+    const delta = currentPos.clone().sub(prevControllerPos);
 
-    if(mid<0.9){
-        textGroup.position.add(delta);
-    }else{
-        textGroup.rotation.y += delta.x * 2.0;
-        textGroup.rotation.x += delta.y * 2.0;
+    if(midTrigger < 0.9){
+        textGroup.position.add(delta.multiplyScalar(panSensitivity));
+    } else {
+        textGroup.rotation.y += delta.x * rotSensitivity;
+        textGroup.rotation.x += delta.y * rotSensitivity;
     }
 
-    prevPos.copy(current);
+    prevControllerPos.copy(currentPos);
 }
 
-function animate(){
-    renderer.setAnimationLoop(render);
-}
+function animate(){ renderer.setAnimationLoop(render); }
 
 function render(){
     updateGamepad();
+    if(!rightController){ renderer.render(scene,camera); return; }
 
-    if(!rightController){
-        renderer.render(scene,camera);
-        return;
-    }
-
-    const trigger = getTriggerValue(0);
-
-    if(trigger>0.05){
+    const trigger = getTriggerValue(0); // 人差し指
+    if(trigger > 0.05){
         draw();
-    }else{
-        handleTransform();
+    } else {
+        handleRotationAndPan();
     }
 
     renderer.render(scene,camera);
@@ -238,7 +221,7 @@ function render(){
 function resize(){
     camera.aspect = window.innerWidth/window.innerHeight;
     camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setSize(window.innerWidth,window.innerHeight);
 }
 </script>
 </body>
