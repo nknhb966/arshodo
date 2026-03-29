@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道（回転＋パン操作統合版）</title>
+<title>AR書道（pivotGroup対応版）</title>
 <style>body{margin:0;overflow:hidden;}</style>
 </head>
 <body>
@@ -29,10 +29,12 @@ const interp=new THREE.Vector3();
 let hasLast=false;
 let lastSize=0.01;
 
-const colorArray = new Float32Array(MAX_STAMPS*3);
+// pivotGroup 用
+let textGroup = new THREE.Group();       // scene直下
+let pivotGroup = new THREE.Group();      // textGroup内で重心中心用
+textGroup.add(pivotGroup);
 
-let textGroup = new THREE.Group();  // 文字全体をまとめるグループ
-scene?.add(textGroup);
+const colorArray = new Float32Array(MAX_STAMPS*3);
 
 let drawing=false;
 
@@ -107,8 +109,7 @@ function createInkSystem(){
     instancedMesh=new THREE.InstancedMesh(geo, mat, MAX_STAMPS);
     instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     instancedMesh.frustumCulled=false;
-    textGroup.add(instancedMesh);
-
+    pivotGroup.add(instancedMesh);
     instancedMesh.count=0;
 }
 
@@ -138,7 +139,7 @@ function draw(){
         for(let i=1;i<=steps;i++){
             const t=i/steps;
             interp.lerpVectors(lastPos,pos,t);
-            stamp(interp, lastSize);
+            stamp(interp,lastSize);
         }
     }
     lastPos.copy(pos);
@@ -152,11 +153,11 @@ function stamp(position, size){
     dummy.updateMatrix();
     instancedMesh.setMatrixAt(stampIndex,dummy.matrix);
     stampIndex++;
-    instancedMesh.count = Math.min(stampIndex,MAX_STAMPS);
+    instancedMesh.count=Math.min(stampIndex,MAX_STAMPS);
     instancedMesh.instanceMatrix.needsUpdate=true;
 }
 
-// 描画終了後に重心計算
+// pivotGroup に重心を適用
 function computePivot(){
     if(stampIndex===0) return;
     let min=new THREE.Vector3(Infinity,Infinity,Infinity);
@@ -168,8 +169,7 @@ function computePivot(){
         max.max(dummy.position);
     }
     const center = min.clone().add(max).multiplyScalar(0.5);
-    // pivotを文字の重心に
-    textGroup.position.set(-center.x,-center.y,-center.z);
+    pivotGroup.position.set(-center.x,-center.y,-center.z);
     pivotComputed=true;
 }
 
@@ -189,12 +189,12 @@ function handleRotationAndPan(){
     const delta = currentPos.clone().sub(prevControllerPos);
 
     if(midTrigger < 0.9){
-        // 半押し：平行移動
-        textGroup.position.add(delta.multiplyScalar(panSensitivity));
+        // 半押し：平行移動（パン）
+        pivotGroup.position.add(delta.multiplyScalar(1.0));
     } else {
         // 全押し：回転
-        textGroup.rotation.y += delta.x * rotSensitivity;
-        textGroup.rotation.x += delta.y * rotSensitivity;
+        pivotGroup.rotation.y += delta.x * rotSensitivity;
+        pivotGroup.rotation.x += delta.y * rotSensitivity;
     }
 
     prevControllerPos.copy(currentPos);
@@ -223,7 +223,7 @@ function render(){
 }
 
 function resize(){
-    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.aspect=window.innerWidth/window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth,window.innerHeight);
 }
