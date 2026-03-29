@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道a</title>
+<title>AR書道（筆位置一致版）</title>
 <style>body{margin:0;overflow:hidden;}</style>
 </head>
 <body>
@@ -126,47 +126,32 @@ function startNewDrawing(){
 
 function draw(){
     if(!rightController) return;
-
     const trigger = getTriggerValue(0); // 人差し指
-
-    // トリガー離したら描画終了
     if(trigger < 0.05){
-        drawing = false;
-        hasLast = false; // ← 次の描画と絶対につながらないようにする
+        drawing=false;
         return;
     }
 
-    // 描画開始
     if(!drawing){
         startNewDrawing();
         drawing = true;
     }
 
-    // コントローラー位置取得（ワールド）
     pos.setFromMatrixPosition(rightController.matrixWorld);
-
-    // textGroup ローカル座標へ変換
     const localPos = pos.clone();
-    textGroup.worldToLocal(localPos);
+    textGroup.worldToLocal(localPos); // ローカル座標に変換
 
-    // 🟢 最初の1点（ここが超重要）
-    if(!hasLast){
-        stamp(localPos, lastSize);
-        lastPos.copy(localPos);
-        hasLast = true;
-        return; // ← 補間しない
-    }
-
-    // 🟢 通常描画（補間）
-    const dist = localPos.distanceTo(lastPos);
-    const steps = Math.max(1, Math.floor(dist / STEP_DISTANCE));
-
-    for(let i = 1; i <= steps; i++){
-        interp.lerpVectors(lastPos, localPos, i / steps);
-        stamp(interp, lastSize);
+    if(hasLast){
+        const dist = localPos.distanceTo(lastPos);
+        const steps = Math.max(1, Math.floor(dist/STEP_DISTANCE));
+        for(let i=1;i<=steps;i++){
+            interp.lerpVectors(lastPos, localPos, i/steps);
+            stamp(interp, lastSize);
+        }
     }
 
     lastPos.copy(localPos);
+    hasLast = true;
 }
 
 function stamp(position, size){
@@ -221,8 +206,8 @@ function render(){
     if(trigger > 0.05){
         draw();
     } else {
-        drawing = false;
-        hasLast = false;
+        drawing=false;
+        hasLast=false;
         handleRotationAndPan();
     }
 
