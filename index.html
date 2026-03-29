@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>AR書道</title>
+<title>AR書道a</title>
 <style>body{margin:0;overflow:hidden;}</style>
 </head>
 <body>
@@ -21,6 +21,7 @@ const MAX_STAMPS = 8000;
 
 let instancedMesh;
 let stampIndex=0;
+let strokeStarted = false;
 
 const dummy = new THREE.Object3D();
 const pos = new THREE.Vector3();
@@ -118,8 +119,11 @@ function startNewDrawing(){
     pos.setFromMatrixPosition(rightController.matrixWorld);
     const localPos = pos.clone();
     textGroup.worldToLocal(localPos);
+
     lastPos.copy(localPos);
     hasLast = false;
+
+    strokeStarted = false; // ★追加（これが重要）
     lastSize = 0.01;
 }
 
@@ -137,33 +141,37 @@ function draw(){
         drawing = true;
     }
 
-    pos.setFromMatrixPosition(rightController.matrixWorld);
-    const localPos = pos.clone();
-    textGroup.worldToLocal(localPos);
+pos.setFromMatrixPosition(rightController.matrixWorld);
+const localPos = pos.clone();
+textGroup.worldToLocal(localPos);
 
-    // ★★★★★ここが追加（超重要）★★★★★
-    if(!hasLast){
-        lastPos.copy(localPos);
-        hasLast = true;
-        return; // ← 最初の1フレームは描かない
-    }
-    // ★★★★★ここまで★★★★★
-
-if(hasLast){
+// ★まだストローク開始してない場合
+if(!strokeStarted){
     const dist = localPos.distanceTo(lastPos);
 
-    // ★追加：近すぎる場合は描かない（これが効く）
-    if(dist < STEP_DISTANCE) return;
-
-    const steps = Math.floor(dist/STEP_DISTANCE);
-
-    for(let i=1;i<=steps;i++){
-        interp.lerpVectors(lastPos, localPos, i/steps);
-        stamp(interp, lastSize);
+    // 一定距離動くまで何も描かない
+    if(dist < STEP_DISTANCE * 2){
+        return;
     }
+
+    // 十分動いたらここで初めて開始
+    strokeStarted = true;
+    lastPos.copy(localPos);
+    return; // ← このフレームも描かない
 }
 
-    lastPos.copy(localPos);
+// 通常描画
+const dist = localPos.distanceTo(lastPos);
+if(dist < STEP_DISTANCE) return;
+
+const steps = Math.floor(dist / STEP_DISTANCE);
+
+for(let i=1;i<=steps;i++){
+    interp.lerpVectors(lastPos, localPos, i/steps);
+    stamp(interp, lastSize);
+}
+
+lastPos.copy(localPos);
 }
 
 function stamp(position, size){
