@@ -115,18 +115,18 @@ function updateGamepad(){
 function getTriggerValue(index){ return gamepad ? gamepad.buttons[index]?.value||0 : 0; }
 
 function startNewDrawing(){
-    // 新しい描画開始時に lastPos を筆位置の textGroup ローカル座標にリセット
-    // pos.setFromMatrixPosition(rightController.matrixWorld);
-    // const localPos = pos.clone();
-    // textGroup.worldToLocal(localPos);
-    // lastPos.copy(localPos);
+    pos.setFromMatrixPosition(rightController.matrixWorld);
+    const localPos = pos.clone();
+    textGroup.worldToLocal(localPos);
+    lastPos.copy(localPos);
     hasLast = false;
-    // lastSize = 0.01;
+    lastSize = 0.01;
 }
 
 function draw(){
     if(!rightController) return;
-    const trigger = getTriggerValue(0); // 人差し指
+    const trigger = getTriggerValue(0);
+
     if(trigger < 0.05){
         drawing=false;
         return;
@@ -137,41 +137,28 @@ function draw(){
         drawing = true;
     }
 
-    // pos.setFromMatrixPosition(rightController.matrixWorld);
-    // const localPos = pos.clone();
-    // textGroup.worldToLocal(localPos); // ローカル座標に変換
+    pos.setFromMatrixPosition(rightController.matrixWorld);
+    const localPos = pos.clone();
+    textGroup.worldToLocal(localPos);
 
-    // if(hasLast){
-    //     const dist = localPos.distanceTo(lastPos);
-    //     const steps = Math.max(1, Math.floor(dist/STEP_DISTANCE));
-    //     for(let i=1;i<=steps;i++){
-    //         interp.lerpVectors(lastPos, localPos, i/steps);
-    //         stamp(interp, lastSize);
-    //     }
-    // }
+    // ★★★★★ここが追加（超重要）★★★★★
+    if(!hasLast){
+        lastPos.copy(localPos);
+        hasLast = true;
+        return; // ← 最初の1フレームは描かない
+    }
+    // ★★★★★ここまで★★★★★
 
-    // lastPos.copy(localPos);
-pos.setFromMatrixPosition(rightController.matrixWorld);
-const localPos = pos.clone();
-textGroup.worldToLocal(localPos);
+    if(hasLast){
+        const dist = localPos.distanceTo(lastPos);
+        const steps = Math.max(1, Math.floor(dist/STEP_DISTANCE));
+        for(let i=1;i<=steps;i++){
+            interp.lerpVectors(lastPos, localPos, i/steps);
+            stamp(interp, lastSize);
+        }
+    }
 
-// ★ここが重要
-if(!hasLast){
     lastPos.copy(localPos);
-    hasLast = true;
-    return; // ← 最初の1点は描かない（接続防止）
-}
-
-const dist = localPos.distanceTo(lastPos);
-const steps = Math.max(1, Math.floor(dist/STEP_DISTANCE));
-
-for(let i=1;i<=steps;i++){
-    interp.lerpVectors(lastPos, localPos, i/steps);
-    stamp(interp, lastSize);
-}
-
-lastPos.copy(localPos);
-    hasLast = true;
 }
 
 function stamp(position, size){
@@ -185,7 +172,6 @@ function stamp(position, size){
     instancedMesh.instanceMatrix.needsUpdate = true;
 }
 
-// 中指トリガーで移動・回転
 let rotationActive=false;
 let prevControllerPos = new THREE.Vector3();
 const panSensitivity = 1.0;
@@ -193,7 +179,7 @@ const rotSensitivity = 2.0;
 
 function handleRotationAndPan(){
     if(!rightController) return;
-    const midTrigger = getTriggerValue(1); // 中指
+    const midTrigger = getTriggerValue(1);
     if(midTrigger < 0.05){ rotationActive=false; prevControllerPos.set(0,0,0); return; }
 
     const currentPos = new THREE.Vector3().setFromMatrixPosition(rightController.matrixWorld);
@@ -222,7 +208,7 @@ function render(){
     updateGamepad();
     if(!rightController){ renderer.render(scene,camera); return; }
 
-    const trigger = getTriggerValue(0); // 人差し指
+    const trigger = getTriggerValue(0);
     if(trigger > 0.05){
         draw();
     } else {
